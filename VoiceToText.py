@@ -1,220 +1,170 @@
+import write_file as wf
 import os
-import json
-import wave
-import base64
-import pyaudio
-import pyttsx3
-import requests
-import keyboard
 import subprocess
-import ProgramLog
-from threading import Thread
-#log用来记录日志，暂时删除
-LOG = ProgramLog.ProgramLog()
+import threading
+import time
+import pyautogui
+import keyboard
+import play_vioce as pv
+import tkinter as tk
+from tkinter import simpledialog
+from tkinter import ttk
+import falseIntent as fi
 CONTROLLER = True
-RETURNTEXT = ""
 
-TTS_ENGINE = pyttsx3.init()     # 初始化pyttsx3模块，为后面调用做准备
-TTS_RATE: int = 150     # 语速
-TTS_VOLUME: float = 1.0     # 音量:0-1
+def run_tasklist():
+    # 使用 cmd 执行 tasklist 命令
+    cmd = 'tasklist /fi "imagename eq ShadowBotBrowser*"'
+    # 使用 subprocess 执行命令
+    result = subprocess.run(
+        cmd,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+    # 获取标准输出和错误输出
+    stdout = result.stdout
+    return stdout
 
-import speech_recognition as sr
- 
-#用的谷歌的api，需要联网，需要科学上网
-def SpeechToText():
-    r = sr.Recognizer()
-    with sr.Microphone() as source:
-        print("请说些什么吧...")
-        # 设置 phrase_time_limit 为 None 表示不限制单次语音时长
-        audio = r.listen(source, timeout=None, phrase_time_limit=None)
+def get_user_input():
+    root = tk.Tk()
+    root.withdraw()
+
+    # 创建自定义的对话框
+    dialog = tk.Toplevel(root)
+    dialog.title("想跟希儿说点什么呢~")
+
+    # 设置对话框的样式
+    style = ttk.Style()
+    style.theme_use('clam')
+    style.configure("Rounded.TEntry", borderwidth=0, relief="flat", padding=5,
+                    background="white", foreground="black", fieldbackground="white")
+    style.configure("Rounded.TButton", borderwidth=0, relief="flat", padding=5,
+                    background="#007BFF", foreground="white", focuscolor="none")
+    style.map("Rounded.TButton",
+              background=[('active', '#0056b3'), ('pressed', '#003d80')])
+
+    # 创建 StringVar 来存储输入框内容
+    input_var = tk.StringVar()
+
+    # 创建输入框
+    entry = ttk.Entry(dialog, style="Rounded.TEntry", textvariable=input_var)
+    entry.pack(pady=20, padx=20, ipadx=10, ipady=5)
+    entry.focus()
+
+    # 定义输入完成的函数
+    def on_input_complete():
+        dialog.destroy()
+        root.destroy()
+
+    # 创建输入完成按钮
+    button = ttk.Button(dialog, text="输入完成", style="Rounded.TButton", command=on_input_complete)
+    button.pack(pady=10, padx=20, ipadx=10, ipady=5)
+
+    # 定义执行 Win + H 的函数
+    def execute_win_h():
         try:
-            print("Google Speech Recognition thinks you said:")
-            text = r.recognize_google(audio, language='zh-CN')
-            print(text)
-        except sr.UnknownValueError:
-            print("Google Speech Recognition could not understand audio")
-        except sr.RequestError as e:
-            print(f"Could not request results from Google Speech Recognition service; {e}")
-    return text
+            if wf.read_dict_from_json("state.json").get('stt_state') == "True":
+                pyautogui.hotkey('win', 'h')
+        except NameError:
+            print("wf 未定义，请检查代码。")
 
+    # 定义点击输入框的事件处理函数
+    def on_entry_click(event):
+        dialog.after(300, execute_win_h)
 
-def TTS(
-        Test: str,
-        rate: int = TTS_RATE,
-        volume: float = TTS_VOLUME
-) -> bool:
-    """
-    使用pyttsx3库，将Test的字符串内容转换为音频并播放
-    :param Test: str
-    :param rate: int = TTS_RATE
-    :param volume: float = TTS_VOLUME
-    :return: bool
-    """
-    global RETURNTEXT
-    RETURNTEXT = Test
-    LOG.output(
-        "正常运行",
-        f"TTS {Test}"
-        )
-    # 设置语音属性
-    # setProperty 方法用于设置语音引擎的属性。
-    # "rate" 表示语音的语速，单位是每分钟的单词数，rate 参数就是用来指定语速的。
-    # "volume" 表示语音的音量，取值范围是 0 到 1，volume 参数用来指定音量大小。
-    TTS_ENGINE.setProperty("rate", rate)
-    TTS_ENGINE.setProperty("volume", volume)
-    #say 方法会把传入的字符串 Test 转换为语音，并将其添加到语音引擎的播放队列中。不过，这时语音还未实际播放
-    TTS_ENGINE.say(Test)
-    # runAndWait 方法会阻塞程序，直到所有的语音播放完成。
-    TTS_ENGINE.runAndWait()
-    # 停止播放
-    TTS_ENGINE.stop()
+    # 绑定输入框的点击事件
+    entry.bind("<Button-1>", on_entry_click)
 
-    return True
+    # 运行对话框
+    root.wait_window(dialog)
+    return input_var.get()
+def file_yingdao(text):
+    if ".txt" in text:
+        text = text[:-4]
+    text = text.replace(" ", "")
+    command = f"cmd /c echo . >D:/SeeleTools/"+wf.read_dict_from_json("file_name.json").get(text)+".txt"
+    # 创建启动信息对象以隐藏窗口
+    startup_info = subprocess.STARTUPINFO()
+    startup_info.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startup_info.wShowWindow = subprocess.SW_HIDE
+    try:
+        # 执行命令并隐藏窗口
+        subprocess.run(command, shell=True, check=True, text=True,
+                       capture_output=True, startupinfo=startup_info)
+    except subprocess.CalledProcessError:
+        pass
+def cmd_yingdao(uid):
+    uid = str(uid)
+    user_profile = os.environ.get("USERPROFILE") or os.path.expanduser("~")
+    desktop_dirs = [os.path.join(user_profile, "Desktop")]
+    public_profile = os.environ.get("PUBLIC")
+    if public_profile:
+        desktop_dirs.append(os.path.join(public_profile, "Desktop"))
+    for key in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial"):
+        onedrive = os.environ.get(key)
+        if onedrive:
+            desktop_dirs.append(os.path.join(onedrive, "Desktop"))
 
-
-def Scanning(
-        Path: str = "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\"
-) -> list:
-    """
-    Windows系统下扫描桌面快捷方式
-    :param Path:  str
-    :return: list
-    """
-    LOG.output("正常运行", "扫描快捷方式 VoiceToText --> def Scanning")
-    __DIRList = []
-    __Files = []
-    for paths, dirs, files in os.walk(Path):
-        if dirs:
-            for i in dirs:
-                __DIRList.append(paths+"\\" + i)
-        if files:
-            for j in files:
-                __Files.append(paths+"\\" + j)
-    return __Files
-
-
-def main() -> None:
-    """
-    主函数
-    :return: None
-    """
-    global CONTROLLER
-    while CONTROLLER:
-        result = SpeechToText()
-        if "退出" in result or "关闭" in result:
+    link_path = None
+    for desktop_dir in desktop_dirs:
+        candidate = os.path.join(desktop_dir, "影刀.lnk")
+        if os.path.exists(candidate):
+            link_path = candidate
             break
-        LOG.output("正常运行", f"{result} VoiceToText --> def GoogleTranslate")
-        if "希儿" in result or "希尔" in result or "曦儿" in result or "西尔" in result:
-            LOG.output("正常运行", "语音唤醒成功 VoiceToText --> def GoogleTranslate")
-            TTS("哥哥，我在的")
-            LOG.output("正常运行", "语音回复")
-            SpeechTWO = SpeechToText()
+    if link_path is None:
+        link_path = os.path.join(desktop_dirs[0], "影刀.lnk")
 
-            LOG.output("正常运行", f"{SpeechTWO} VoiceToText --> def main")
+    print(f"\"{link_path}\" shadowbot:Run?robot-uuid={uid}")
+    command = f"\"{link_path}\" shadowbot:Run?robot-uuid={uid}"
+    # 创建启动信息对象以隐藏窗口
+    startup_info = subprocess.STARTUPINFO()
+    startup_info.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startup_info.wShowWindow = subprocess.SW_HIDE
+    try:
+        # 执行命令并隐藏窗口
+        subprocess.run(command, shell=True, check=True, text=True,
+                       capture_output=True, startupinfo=startup_info)
+    except subprocess.CalledProcessError:
+        pass
 
-            if "微信" in SpeechTWO:
-                
-                TTS("已为您打开百度")
-                LOG.output("正常运行", f"语音回复：已为您打开百度")
-
-            elif "百度搜索" in SpeechTWO:
-                TTS("好的, 主人")
-                LOG.output("正常运行", "语音回复：好的，主人")
-                subprocess.Popen(
-                     f"start https://www.baidu.com/s?wd={SpeechTWO.strip('百度搜索')}",
-                     shell=True,
-                     stdout=subprocess.PIPE,
-                     stderr=subprocess.STDOUT,
-                     stdin=subprocess.PIPE
-                     )
-                # popen.stdin.close()
-                # popen.wait()
-                # stdout.read()
-                # popen.stdout.close()
-                TTS(f"已为您搜索{SpeechTWO.strip('百度搜索')}")
-                LOG.output("正常运行", f"语音回复：已为您搜索{SpeechTWO.strip('百度搜索')}")
-
-            elif "打开命令行" in SpeechTWO:
-                TTS("好的, 主人")
-                LOG.output("正常运行", "语音回复：好的，主人")
-                subprocess.Popen(
-                     f"start cmd",
-                     shell=True,
-                     stdout=subprocess.PIPE,
-                     stderr=subprocess.STDOUT,
-                     stdin=subprocess.PIPE
-                     )
-                # popen.stdin.close()
-                # popen.wait()
-                # stdout.read()
-                # popen.stdout.close()
-                TTS("已为您打开命令行")
-                LOG.output("正常运行", "语音回复：已为您打开命令行")
-
-            elif "关闭语音功能" in SpeechTWO or "关闭语音" in SpeechTWO:
-                TTS("好的,主人 下次再见")
-                LOG.output("正常运行", "语音回复：好的，主人 下次再见")
-                break
-
-            elif "打开" in SpeechTWO:
-                TTS("好的, 主人")
-                LOG.output("正常运行", "语音回复：好的，主人")
-                IsStart = False
-                Text = str(SpeechTWO).strip("。").replace("元", "原")
-                for _Path in Scanning():
-                    if Text.strip("打开") == os.path.split(_Path)[-1].split(".")[0]:
-                        popen = subprocess.Popen(
-                            f"{_Path}",
-                            shell=True,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT,
-                            stdin=subprocess.PIPE
-                        )
-                        popen.stdin.close()
-                        # popen.wait()
-                        # stdout.read()
-                        # popen.stdout.close()
-                        print(_Path)
-                        TTS(f"已为您打开 {Text.strip('打开')}")
-                        LOG.output("正常运行", f"语音回复：已为您打开 {Text.strip('打开')}")
-                        IsStart = True
-                        break
-                if IsStart:
-                    continue
+def text_intent(text):
+    pv.main("3.wav")
+    text=fi.main(text)
+    if text=="创建工作":
+        cmd_yingdao("")
+    else:
+        try:
+            if wf.read_dict_from_json("state.json").get('startup_mode') == "fast":
+                if "没有运行的任务" in run_tasklist():
+                    pv.main("11.wav")
                 else:
-                    TTS(f"主人未找到 {Text.strip('打开')}")
-                    LOG.output("正常运行", f"语音回复：主人未找到 {Text.strip('打开')}")
-
-            elif "关机" in SpeechTWO:
-                TTS("主人是否确定要关机呢？")
-                LOG.output("正常运行", f"语音回复：主人是否确定要关机呢？")
-                IsShotDown = SpeechToText()
-                if IsShotDown in ["是", "是的", "没错", "要"]:
-                    TTS("好的, 主人好好休息！")
-                    LOG.output("正常运行", f"语音回复：好的, 主人好好休息！")
-                    subprocess.Popen(
-                        f"shutdown -s -t 1",
-                        shell=True,
-                        )
-                    # popen.stdin.close()
-                    # popen.wait()
-                    # stdout.read()
-                    # popen.stdout.close()
-                elif IsShotDown in ["否", "不", "不要", "不关机"]:
-                    TTS("好的, 不进行关机")
-                    LOG.output("正常运行", f"语音回复：好的, 不进行关机")
-                else:
-                    TTS("主人，我没听懂")
-                    LOG.output("正常运行", f"语音回复：主人，我没听懂")
+                    file_yingdao(text)
             else:
-                with requests.get(f"http://www.liulongbin.top:3006/api/robot?spoken={SpeechTWO}") as get:
-                    if get.status_code == 200:
-                        try:
-                            TTS(str(get.json()['data']['info']['text']).replace("小思", "小雨"))
-                        except TypeError:
-                            continue
+                data = wf.read_dict_from_json("uid.json")
+                uid=data.get(text,-1)
+                if uid==-1:
+                    pv.main("4.wav")
+                else:
+                    cmd_yingdao(uid)
+        except :
+            pv.main("4.wav")
+def main():
+    global CONTROLLER
+    hotkey = '`'
+    # 添加热键（仅添加一次）
+    keyboard.add_hotkey(hotkey, lambda: text_intent(get_user_input()))
+
+    try:
+        while CONTROLLER:
+            time.sleep(0.1)  # 空循环保持线程运行
+    finally:
+        # 退出时移除热键并停止监听
+        keyboard.remove_hotkey(hotkey)
+        keyboard.unhook_all()
 
 
 def run() -> None:
-    Start = Thread(target=main)
-    Start.start()
+    start = threading.Thread(target=main)
+    start.start()

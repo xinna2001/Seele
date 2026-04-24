@@ -1,5 +1,5 @@
 import json
-
+import write_file as wf
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtWidgets import QPushButton
 from PyQt5.QtWidgets import QLabel
@@ -11,22 +11,26 @@ from PyQt5.QtCore import Qt
 class main(QWidget):
     def __init__(self) -> None:
         super(main, self).__init__()
-        self.setWindowTitle("ProgramsConfig")
+        self.setWindowTitle("自定义语音唤醒")
         self.setWindowIcon(QIcon(".\\image\\bs_icon.ico"))
-        self.setWindowFlags(Qt.WindowMinMaxButtonsHint)
         self.setStyleSheet("""
             QWidget {
-                background-color: black;
-                }
+                background-color: gray;
+            }
             QLabel {
                 color: black;
                 background-color: white;
             }
             QLineEdit {
                 background-color: white;
+                color: black;
             }
             QLineEdit:hover {
-                background-color: black;
+                background-color: #f0f0f0;
+            }
+            QLineEdit:focus {
+                background-color: white;
+                color: black;
             }
             QPushButton {
                 background-color: white;
@@ -42,7 +46,7 @@ class main(QWidget):
                 color: black;
             }
         """)
-        self.resize(550, 150)
+        self.resize(400, 100)
         self.ui()
     
     def ui(self) -> None:
@@ -50,53 +54,121 @@ class main(QWidget):
 
         __BaiDuYunHLayout = QVBoxLayout()
         __BaiDuYunLabel = QLabel(self)
-        __BaiDuYunLabel.setText("设置百度云请求参数")
+        __BaiDuYunLabel.setText("输入uid和唤醒词")
 
-        self.APIKeyLineEdit = QLineEdit(self)
-        self.APIKeyLineEdit.setPlaceholderText("ApiKey")
+        self.uid_text = QLineEdit(self)
+        self.uid_text.setPlaceholderText("uid")
 
-        self.SecretKeyLineEdit = QLineEdit(self)
-        self.SecretKeyLineEdit.setPlaceholderText("SecretKey")
+        self.word_text = QLineEdit(self)
+        self.word_text.setPlaceholderText("唤醒词")
 
         __BaiDuYunHLayout.addWidget(__BaiDuYunLabel)
-        __BaiDuYunHLayout.addWidget(self.APIKeyLineEdit)
-        __BaiDuYunHLayout.addWidget(self.SecretKeyLineEdit)
+        __BaiDuYunHLayout.addWidget(self.uid_text)
+        __BaiDuYunHLayout.addWidget(self.word_text)
         __BaiDuYunHLayout.setSpacing(0)
 
         __Yes_NoLayout = QHBoxLayout()
         __Yes = QPushButton(self)
         __Yes.setText("确认")
         __Yes.clicked.connect(self.YesEvent)
-        __No = QPushButton(self)
-        __No.setText("取消")
-        __No.clicked.connect(self.hide)
         __Yes_NoLayout.addWidget(__Yes)
-        __Yes_NoLayout.addWidget(__No)
 
         __MainLayout.addLayout(__BaiDuYunHLayout)
         __MainLayout.addLayout(__Yes_NoLayout)
         self.setLayout(__MainLayout)
     
     def YesEvent(self) -> None:
-        __APIKey = self.APIKeyLineEdit.text()
-        __SecretKey = self.SecretKeyLineEdit.text()
-        with open(".\\config.json", "r") as rfp:
-            __SourceData = json.loads(rfp.read())
-        with open(".\\config.json", "w+") as wfp:
-            if __SourceData['APIKey'] != __APIKey:
-                if len(__APIKey) > 1:
-                    __SourceData['APIKey'] = __APIKey
-            if __SourceData['SecretKey'] != __SecretKey:
-                if len(__SecretKey) > 1:
-                    __SourceData['SecretKey'] = __SecretKey
-            wfp.write(json.dumps(__SourceData, indent=4, ensure_ascii=False))
-        QMessageBox.information(self, "Programs Config Message", "已写入配置,重启后生效!", QMessageBox.Yes)
+        uid = self.uid_text.text()
+        word = self.word_text.text()
+        if uid == "" or word == "":
+            QMessageBox.warning(self, "警告", "uid和唤醒词不能为空")
+            return
+        else:
+            uid_json = wf.read_dict_from_json("uid.json")
+            uid_json[word] = uid
+            wf.write_dict_to_json(uid_json, "uid.json")
+            # 关闭当前窗口
+            QMessageBox.information(self, "Programs Config Message", "自定义语音已设置成功！", QMessageBox.Yes)
 
 
-# if __name__ in "__main__":
-#     import sys
-#     from PyQt5.QtWidgets import QApplication
-#     app = QApplication(sys.argv)
-#     window = main()
-#     window.show()
-#     app.exec_()
+class main2(QWidget):
+    def __init__(self) -> None:
+        super(main2, self).__init__()
+        self.setWindowTitle("自定义语音唤醒")
+        self.setWindowIcon(QIcon(".\\image\\bs_icon.ico"))
+        self.setStyleSheet("""
+            QWidget {
+                background-color: gray;
+            }
+            QLabel {
+                color: black;
+                background-color: white;
+            }
+            QLineEdit {
+                background-color: white;
+                color: black;
+            }
+            QLineEdit:hover {
+                background-color: #f0f0f0;
+            }
+            QLineEdit:focus {
+                background-color: white;
+                color: black;
+            }
+            QPushButton {
+                background-color: white;
+            }
+            QPushButton:hover {
+                background-color: green;
+            }
+            QVBoxLayout {
+                background-color: white;
+            }
+            QMessageBox {
+                background-color: white;
+                color: black;
+            }
+        """)
+        self.resize(400, 100)
+        self.ui()
+    
+    def ui(self) -> None:
+        __MainLayout = QVBoxLayout(self)
+
+        __BaiDuYunHLayout = QVBoxLayout()
+        __BaiDuYunLabel = QLabel(self)
+        __BaiDuYunLabel.setText("输入txt文件名称和唤醒词")
+
+        self.uid_text = QLineEdit(self)
+        self.uid_text.setPlaceholderText("txt文件名称")
+
+        self.word_text = QLineEdit(self)
+        self.word_text.setPlaceholderText("唤醒词")
+
+        __BaiDuYunHLayout.addWidget(__BaiDuYunLabel)
+        __BaiDuYunHLayout.addWidget(self.uid_text)
+        __BaiDuYunHLayout.addWidget(self.word_text)
+        __BaiDuYunHLayout.setSpacing(0)
+
+        __Yes_NoLayout = QHBoxLayout()
+        __Yes = QPushButton(self)
+        __Yes.setText("确认")
+        __Yes.clicked.connect(self.YesEvent)
+        __Yes_NoLayout.addWidget(__Yes)
+
+        __MainLayout.addLayout(__BaiDuYunHLayout)
+        __MainLayout.addLayout(__Yes_NoLayout)
+        self.setLayout(__MainLayout)
+    
+    def YesEvent(self) -> None:
+        uid = self.uid_text.text()
+        word = self.word_text.text()
+        if uid == "" or word == "":
+            QMessageBox.warning(self, "警告", "文件名称和唤醒词不能为空")
+            return
+        else:
+            uid_json = wf.read_dict_from_json("file_name.json")
+            uid_json[word] = uid
+            wf.write_dict_to_json(uid_json, "file_name.json")
+            # 关闭当前窗口
+            QMessageBox.information(self, "Programs Config Message", "自定义语音已设置成功！", QMessageBox.Yes)
