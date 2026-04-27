@@ -3,9 +3,10 @@ import random
 import sys
 import write_file as wf
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QWidget, QPushButton, QLabel, QVBoxLayout, QHBoxLayout, QMessageBox
+from PyQt5.QtCore import Qt, QPoint
+from PyQt5.QtGui import QIcon, QPainter, QPainterPath, QPixmap
+from PyQt5.QtWidgets import QWidget, QPushButton, QLabel, QVBoxLayout, QHBoxLayout, QMessageBox, QFrame
+from PyQt5.QtCore import QRectF
 
 
 def get_base_dir():
@@ -23,51 +24,68 @@ class main(QWidget):
         super(main, self).__init__()
         self.desktop_wife = desktop_wife
         self.setWindowTitle("换个角色")
-        self.setWindowIcon(QIcon(".\image\bs_icon.ico"))
-        self.setStyleSheet("""
-            QWidget {
-                background-color: gray;
-            }
-            QLabel {
-                color: black;
-                background-color: white;
-            }
-            QPushButton {
-                background-color: white;
-            }
-            QPushButton:hover {
-                background-color: green;
-            }
-            QVBoxLayout {
-                background-color: white;
-            }
-            QMessageBox {
-                background-color: white;
-                color: black;
-            }
-        """)
-        self.resize(480, 120)
+        self.setWindowIcon(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.ico")))
+
+        # Rounded + background image needs a frameless translucent window.
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+
+        self._drag_pos = None
+        self._bg = QPixmap(os.path.join(get_base_dir(), "image", "bs.png"))
+
+        # Standard window size
+        self.resize(800, 500)
+        self.setMinimumSize(800, 500)
         self.ui()
 
     def ui(self) -> None:
-        main_layout = QVBoxLayout(self)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(18, 18, 18, 18)
+        root_layout.setSpacing(14)
+
+        # Foreground rounded panel for readability
+        self.card = QFrame(self)
+        self.card.setObjectName("role_card")
+        self.card.setStyleSheet(
+            "#role_card {"
+            "  background-color: rgba(255, 255, 255, 210);"
+            "  border-radius: 18px;"
+            "}"
+            "QLabel { color: #111; }"
+            "QPushButton {"
+            "  border-radius: 14px;"
+            "  padding: 10px 18px;"
+            "}"
+        )
+
+        main_layout = QVBoxLayout(self.card)
+        main_layout.setContentsMargins(22, 18, 22, 18)
+        main_layout.setSpacing(16)
 
         title = QLabel(self)
         title.setText("选择一个角色")
         title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 18px; font-weight: 600;")
 
         buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(18)
         self.btn_aili = QPushButton(self)
         self.btn_aili.setText("爱莉希雅")
         self.btn_aili.clicked.connect(self.select_aili)
+        self.btn_aili.setMinimumHeight(56)
+        self.btn_aili.setStyleSheet("font-size: 16px;")
 
         self.btn_furina = QPushButton(self)
         self.btn_furina.setText("芙宁娜")
         self.btn_furina.clicked.connect(self.select_furina)
+        self.btn_furina.setMinimumHeight(56)
+        self.btn_furina.setStyleSheet("font-size: 16px;")
 
         self.btn_xier = QPushButton(self)
         self.btn_xier.setText("希儿")
         self.btn_xier.clicked.connect(self.select_xier)
+        self.btn_xier.setMinimumHeight(56)
+        self.btn_xier.setStyleSheet("font-size: 16px;")
 
         buttons_layout.addWidget(self.btn_aili)
         buttons_layout.addWidget(self.btn_furina)
@@ -75,7 +93,47 @@ class main(QWidget):
 
         main_layout.addWidget(title)
         main_layout.addLayout(buttons_layout)
-        self.setLayout(main_layout)
+        # Keep the content compact and centered in the larger window.
+        self.card.setFixedSize(720, 220)
+        root_layout.addStretch(1)
+        root_layout.addWidget(self.card, 0, Qt.AlignCenter)
+        root_layout.addStretch(2)
+        self.setLayout(root_layout)
+
+    def paintEvent(self, event):
+        # Draw rounded window with background image.
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        rect = QRectF(self.rect())
+        radius = 22
+        path = QPainterPath()
+        path.addRoundedRect(rect.adjusted(0, 0, -1, -1), float(radius), float(radius))
+        painter.setClipPath(path)
+
+        if not self._bg.isNull():
+            # Cover-fill
+            scaled = self._bg.scaled(self.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+            x = int((rect.width() - scaled.width()) / 2)
+            y = int((rect.height() - scaled.height()) / 2)
+            painter.drawPixmap(x, y, scaled)
+        else:
+            painter.fillRect(rect, Qt.white)
+
+        super().paintEvent(event)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            self._drag_pos = event.globalPos() - self.frameGeometry().topLeft()
+            event.accept()
+
+    def mouseMoveEvent(self, event) -> None:
+        if (event.buttons() & Qt.LeftButton) and self._drag_pos is not None:
+            self.move(event.globalPos() - self._drag_pos)
+            event.accept()
+
+    def mouseReleaseEvent(self, event) -> None:
+        self._drag_pos = None
+        event.accept()
 
     def _apply_gif(self, gif_path: str, role_name: str, role_key: str) -> None:
         if not self.desktop_wife or not hasattr(self.desktop_wife, "set_character_gif"):
@@ -104,4 +162,3 @@ class main(QWidget):
     def select_xier(self) -> None:
         gif_path = os.path.join(get_base_dir(), "image", "bss.gif")
         self._apply_gif(gif_path, "希儿", "xier")
-

@@ -1,5 +1,10 @@
 import sys
 import os
+
+# qt-material/qtpy picks the Qt binding at import time.
+# Set this as early as possible to ensure PyQt5 is selected.
+os.environ.setdefault("QT_API", "pyqt5")
+
 import Tray
 import OutVoice
 import initialize
@@ -8,7 +13,7 @@ import StartupMode
 import write_file as wf
 import ProgramsConfigWindow
 import RoleSwitchWindow
-from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtCore import Qt, QSize, QPoint
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import QRectF
 from PyQt5.QtGui import QPixmap
@@ -23,6 +28,48 @@ from PyQt5.QtGui import QPainterPath
 from PyQt5.QtGui import QIcon, QMovie
 from PyQt5.QtWidgets import QDesktopWidget
 from PyQt5.QtWidgets import QMessageBox, QApplication
+
+def _apply_material_theme(app: QApplication) -> None:
+    """
+    Apply a modern Material theme globally to all PyQt widgets.
+    Falls back silently if qt-material is not installed.
+    """
+    os.environ.setdefault("QT_API", "pyqt5")
+    try:
+        # Ensure PyQt5 binding modules are loaded before importing qt_material.
+        from PyQt5 import QtWidgets  # noqa: F401
+    except Exception:
+        return
+    try:
+        # qt_material may emit warnings on import; keep console clean.
+        import logging
+
+        root = logging.getLogger()
+        old_level = root.level
+        root.setLevel(logging.ERROR)
+        try:
+            import qt_material
+        finally:
+            root.setLevel(old_level)
+
+        # Some qt_material versions may reference QFontDatabase without importing it.
+        try:
+            from PyQt5.QtGui import QFontDatabase  # noqa: F401
+
+            if not hasattr(qt_material, "QFontDatabase"):
+                qt_material.QFontDatabase = QFontDatabase
+        except Exception:
+            pass
+
+        apply_stylesheet = getattr(qt_material, "apply_stylesheet", None)
+        if not apply_stylesheet:
+            return
+
+        theme = os.environ.get("SEELE_QT_THEME", "light_blue.xml")
+        apply_stylesheet(app, theme=theme)
+    except Exception:
+        # Theme is optional; never crash app startup due to styling.
+        return
 
 def get_base_dir():
     if getattr(sys, 'frozen', False):
@@ -156,13 +203,22 @@ class DesktopWife(QWidget):
         self.WindowMessage.adjustSize()
         self.WindowMessage.move(self.width() - self.WindowMessage.width() - 20, 20)
 
-    def _WindowMenu(self) -> None:
+    def _WindowMenu(self, _pos=None) -> None:
         """
         右键菜单
         :return: None
         """
         self.Menu = QMenu(self)
-        self.Menu.setStyleSheet("background-color: black; color: white;")
+        # Make the menu easier to click/read; leave colors to the global theme.
+        f = self.Menu.font()
+        f.setPointSize(max(10, f.pointSize() + 1))
+        self.Menu.setFont(f)
+        self.Menu.setMinimumWidth(220)
+        # QMenu has no setIconSize() on PyQt5; use stylesheet to size icons/padding.
+        self.Menu.setStyleSheet(
+            "QMenu::icon { width: 26px; height: 26px; }"
+            "QMenu::item { padding: 8px 20px; }"
+        )
 
         self.custom_voice = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"自定义语音唤醒", self)
         self.Menu.addAction(self.custom_voice)
@@ -188,15 +244,11 @@ class DesktopWife(QWidget):
         self.StartTray.triggered.connect(self.SetTray)
         self.startup.triggered.connect(self.Startup)
         self.CloseWindowAction.triggered.connect(self.CloseWindowActionEvent)
-        self.Menu.popup(QCursor.pos())
-
-        # 圆角
-        rect = QRectF(0, 0, self.Menu.width(), self.Menu.height())
-        path = QPainterPath()
-        path.addRoundedRect(rect, 10, 10)
-        polygon = path.toFillPolygon().toPolygon()
-        region = QRegion(polygon)
-        self.Menu.setMask(region)
+        # Restore the old feel: popup near the click/cursor position.
+        if _pos is not None:
+            self.Menu.popup(self.mapToGlobal(_pos))
+        else:
+            self.Menu.popup(QCursor.pos())
 
     def ProgramsConfig(self) -> None:
         """
@@ -284,6 +336,7 @@ class DesktopWife(QWidget):
 
 def main():
     app = QApplication(sys.argv)
+    _apply_material_theme(app)
     app.setQuitOnLastWindowClosed(False)
     Window = DesktopWife()
     Window.show()
