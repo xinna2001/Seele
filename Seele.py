@@ -72,7 +72,17 @@ class DesktopWife(QWidget):
         self.m_flag = False
         self.m_Position = None
         # 加载 GIF 动画
-        self.movie = QMovie(os.path.join(get_base_dir(), "image", "bss.gif"))
+        character = (wf.read_dict_from_json(_json_path('state.json')) or {}).get("character", "xier")
+        if character == "aili":
+            gif_path = os.path.join(get_base_dir(), "image", "aili.gif")
+        elif character == "furina":
+            import random
+            candidates = ["ff1.gif", "ff2.gif", "ff3.gif"]
+            gif_name = random.choice(candidates)
+            gif_path = os.path.join(get_base_dir(), "image", gif_name)
+        else:  # xier 或默认
+            gif_path = os.path.join(get_base_dir(), "image", "bss.gif")
+        self.movie = QMovie(gif_path)
         # # 设置播放速度为原始速度的 X%
         self.movie.setSpeed(95)
         self._scaled_initialized = False

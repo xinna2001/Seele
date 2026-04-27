@@ -6,6 +6,12 @@ import play_vioce as pv
 import sys  # 新增导入shutil模块
 
 
+def get_tools_folder_path():
+    if os.path.isdir(r"D:\\"):
+        return r"D:\SeeleTools"
+    return r"C:\SeeleTools"
+
+
 def set_file(current_dir):
     # 获取当前文件所在目录
     # current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -24,7 +30,7 @@ def set_file(current_dir):
     src_file = os.path.join(current_dir, 'state.json')
     installation_package_path = os.path.join(current_dir,'installationPackage')
     # 创建文件夹
-    folder_path = r"D:\SeeleTools"
+    folder_path = get_tools_folder_path()
     try:
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
