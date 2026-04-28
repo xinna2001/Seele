@@ -1,9 +1,9 @@
 import sys
 import os
 import write_file
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QIcon, QPixmap, QPalette, QBrush
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QMessageBox, QLabel
+from PyQt5.QtCore import Qt, QRectF
+from PyQt5.QtGui import QIcon, QPixmap, QPainter, QPainterPath
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QMessageBox, QLabel, QFrame
 
 
 def get_base_dir():
@@ -12,69 +12,114 @@ def get_base_dir():
     return os.path.dirname(os.path.abspath(__file__))
 
 
-def _apply_bg(widget: QWidget) -> None:
-    bg = QPixmap(os.path.join(get_base_dir(), "image", "bs.png"))
-    if bg.isNull():
-        return
-    scaled = bg.scaled(widget.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
-    pal = widget.palette()
-    pal.setBrush(QPalette.Window, QBrush(scaled))
-    widget.setAutoFillBackground(True)
-    widget.setPalette(pal)
 class main(QWidget):
     def __init__(self) -> None:
         super(main, self).__init__()
         self.setWindowTitle("语音输入")
         self.setWindowIcon(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.ico")))
-        self.resize(800, 500)
-        self.setMinimumSize(800, 500)
-        _apply_bg(self)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self._drag_pos = None
+        self._bg = QPixmap(os.path.join(get_base_dir(), "image", "bs.png"))
+        self.resize(800, 750)
+        self.setMinimumSize(800, 750)
         self.ui()
 
     def ui(self) -> None:
-        __MainLayout = QVBoxLayout(self)
-        __MainLayout.setContentsMargins(40, 40, 40, 40)
-        __MainLayout.setSpacing(24)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(18, 18, 18, 18)
+        root_layout.setSpacing(14)
 
-        title = QLabel("语音输入", self)
-        title.setStyleSheet("font-size: 22px; font-weight: 600; color: #111;")
-        title.setAlignment(Qt.AlignHCenter)
-        __MainLayout.addWidget(title)
+        self.card = QFrame(self)
+        self.card.setObjectName("voice_card")
+        self.card.setStyleSheet(
+            "#voice_card { background-color: rgba(255, 255, 255, 210); border-radius: 22px; }"
+            "QLabel { color: #111; }"
+            "QPushButton { border-radius: 18px; padding: 14px 22px; font-size: 22px; }"
+        )
 
-        __Yes_NoLayout = QHBoxLayout()
-        __Yes_NoLayout.setSpacing(24)
-        __Yes = QPushButton(self)
-        __Yes.setText("开启")
-        __Yes.setMinimumHeight(72)
-        __Yes.setStyleSheet("font-size: 18px;")
-        __Yes.clicked.connect(self.YesEvent)
-        __No = QPushButton(self)
-        __No.setText("关闭")
-        __No.setMinimumHeight(72)
-        __No.setStyleSheet("font-size: 18px;")
-        __No.clicked.connect(self.hide_event)
+        main_layout = QVBoxLayout(self.card)
+        main_layout.setContentsMargins(32, 28, 32, 28)
+        main_layout.setSpacing(24)
 
-        __Yes_NoLayout.addWidget(__Yes)
-        __Yes_NoLayout.addWidget(__No)
+        title = QLabel("语音输入", self.card)
+        title.setStyleSheet("font-size: 26px; font-weight: 600;")
+        title.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(title)
 
-        __MainLayout.addLayout(__Yes_NoLayout)
-        __MainLayout.addStretch(1)
+        tip = QLabel("请选择是否启用语音输入", self.card)
+        tip.setStyleSheet("font-size: 18px;")
+        tip.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(tip)
+
+        btn_layout = QVBoxLayout()
+        btn_layout.setSpacing(20)
+        on_btn = QPushButton("开启", self.card)
+        on_btn.setMinimumHeight(88)
+        on_btn.clicked.connect(self.YesEvent)
+        off_btn = QPushButton("关闭", self.card)
+        off_btn.setMinimumHeight(88)
+        off_btn.clicked.connect(self.hide_event)
+        btn_layout.addWidget(on_btn)
+        btn_layout.addWidget(off_btn)
+
+        main_layout.addStretch(1)
+        main_layout.addLayout(btn_layout)
+        main_layout.addStretch(1)
+
+        self.card.setFixedSize(720, 420)
+        root_layout.addStretch(2)
+        root_layout.addWidget(self.card, 0, Qt.AlignCenter)
+        root_layout.addStretch(2)
+        self.setLayout(root_layout)
 
     def YesEvent(self) -> None:
         dic = write_file.read_dict_from_json('state.json')
         dic["stt_state"] = "True"
         write_file.write_dict_to_json(dic, 'state.json')
-        QMessageBox.information(self, "Programs Config Message", "语音输入已开启！", QMessageBox.Yes)
+        self.close()
 
     def hide_event(self) -> None:
         dic = write_file.read_dict_from_json('state.json')
         dic["stt_state"] = "False"
         write_file.write_dict_to_json(dic, 'state.json')
-        QMessageBox.information(self, "Programs Config Message", "语音输入已关闭！", QMessageBox.Yes)
+        self.close()
 
-    def resizeEvent(self, event):
-        _apply_bg(self)
-        return super().resizeEvent(event)
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        rect = QRectF(self.rect())
+        path = QPainterPath()
+        path.addRoundedRect(rect.adjusted(0, 0, -1, -1), 22.0, 22.0)
+        painter.setClipPath(path)
+        if not self._bg.isNull():
+            scaled = self._bg.scaled(self.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+            x = int((rect.width() - scaled.width()) / 2)
+            y = int((rect.height() - scaled.height()) / 2)
+            painter.drawPixmap(x, y, scaled)
+        else:
+            painter.fillRect(rect, Qt.white)
+        super().paintEvent(event)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            self._drag_pos = event.globalPos() - self.frameGeometry().topLeft()
+            event.accept()
+
+    def mouseMoveEvent(self, event) -> None:
+        if (event.buttons() & Qt.LeftButton) and self._drag_pos is not None:
+            self.move(event.globalPos() - self._drag_pos)
+            event.accept()
+
+    def mouseReleaseEvent(self, event) -> None:
+        self._drag_pos = None
+        event.accept()
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key_Escape:
+            self.close()
+            return
+        super().keyPressEvent(event)
 
 
 if __name__ == "__main__":

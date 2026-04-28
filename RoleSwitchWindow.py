@@ -34,8 +34,8 @@ class main(QWidget):
         self._bg = QPixmap(os.path.join(get_base_dir(), "image", "bs.png"))
 
         # Standard window size
-        self.resize(800, 500)
-        self.setMinimumSize(800, 500)
+        self.resize(800, 750)
+        self.setMinimumSize(800, 750)
         self.ui()
 
     def ui(self) -> None:
@@ -49,43 +49,43 @@ class main(QWidget):
         self.card.setStyleSheet(
             "#role_card {"
             "  background-color: rgba(255, 255, 255, 210);"
-            "  border-radius: 18px;"
+            "  border-radius: 22px;"
             "}"
             "QLabel { color: #111; }"
             "QPushButton {"
-            "  border-radius: 14px;"
-            "  padding: 10px 18px;"
+            "  border-radius: 18px;"
+            "  padding: 14px 22px;"
             "}"
         )
 
         main_layout = QVBoxLayout(self.card)
-        main_layout.setContentsMargins(22, 18, 22, 18)
-        main_layout.setSpacing(16)
+        main_layout.setContentsMargins(32, 28, 32, 28)
+        main_layout.setSpacing(24)
 
         title = QLabel(self)
         title.setText("选择一个角色")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 18px; font-weight: 600;")
+        title.setStyleSheet("font-size: 26px; font-weight: 600;")
 
         buttons_layout = QHBoxLayout()
         buttons_layout.setSpacing(18)
         self.btn_aili = QPushButton(self)
         self.btn_aili.setText("爱莉希雅")
         self.btn_aili.clicked.connect(self.select_aili)
-        self.btn_aili.setMinimumHeight(56)
-        self.btn_aili.setStyleSheet("font-size: 16px;")
+        self.btn_aili.setMinimumHeight(82)
+        self.btn_aili.setStyleSheet("font-size: 22px;")
 
         self.btn_furina = QPushButton(self)
         self.btn_furina.setText("芙宁娜")
         self.btn_furina.clicked.connect(self.select_furina)
-        self.btn_furina.setMinimumHeight(56)
-        self.btn_furina.setStyleSheet("font-size: 16px;")
+        self.btn_furina.setMinimumHeight(82)
+        self.btn_furina.setStyleSheet("font-size: 22px;")
 
         self.btn_xier = QPushButton(self)
         self.btn_xier.setText("希儿")
         self.btn_xier.clicked.connect(self.select_xier)
-        self.btn_xier.setMinimumHeight(56)
-        self.btn_xier.setStyleSheet("font-size: 16px;")
+        self.btn_xier.setMinimumHeight(82)
+        self.btn_xier.setStyleSheet("font-size: 22px;")
 
         buttons_layout.addWidget(self.btn_aili)
         buttons_layout.addWidget(self.btn_furina)
@@ -94,8 +94,8 @@ class main(QWidget):
         main_layout.addWidget(title)
         main_layout.addLayout(buttons_layout)
         # Keep the content compact and centered in the larger window.
-        self.card.setFixedSize(720, 220)
-        root_layout.addStretch(1)
+        self.card.setFixedSize(720, 320)
+        root_layout.addStretch(2)
         root_layout.addWidget(self.card, 0, Qt.AlignCenter)
         root_layout.addStretch(2)
         self.setLayout(root_layout)
@@ -134,6 +134,12 @@ class main(QWidget):
     def mouseReleaseEvent(self, event) -> None:
         self._drag_pos = None
         event.accept()
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key_Escape:
+            self.close()
+            return
+        super().keyPressEvent(event)
 
     def _apply_gif(self, gif_path: str, role_name: str, role_key: str) -> None:
         if not self.desktop_wife or not hasattr(self.desktop_wife, "set_character_gif"):
