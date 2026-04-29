@@ -26,6 +26,8 @@ def set_file(current_dir):
     audio_folder_path = os.path.join(current_dir, 'audio')
     # 获取桌面路径
     desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
+    # 获取下载路径
+    download_path = os.path.join(os.path.expanduser("~"), "Downloads")
     # 实时获取和当前文件同级目录的 state.json 文件路径
     src_file = os.path.join(current_dir, 'state.json')
     installation_package_path = os.path.join(current_dir,'installationPackage')
@@ -43,8 +45,9 @@ def set_file(current_dir):
         Desktop_link_file = os.path.join(folder_path, "DesktopLink.txt")
         state_link_file = os.path.join(folder_path, "stateLink.txt")
         installation_ackage = os.path.join(folder_path, "installationPackageLink.txt")
+        task_flow_file = os.path.join(folder_path, "TaskFlow.txt")
         # 创建文件
-        with open(state_link_file, 'w') as file1, open(voice_playback_link_file, 'w') as file2, open(Desktop_link_file, 'w') as file3, open(installation_ackage, 'w') as file4:
+        with open(state_link_file, 'w') as file1, open(voice_playback_link_file, 'w') as file2, open(Desktop_link_file, 'w') as file3, open(installation_ackage, 'w') as file4, open(download_link_file, 'w') as file5, open(task_flow_file, 'w', encoding='utf-8') as file6:
             file1.write(src_file)
             # 将 audio_folder_path 写入 VoicePlaybackLink.txt
             file2.write(audio_folder_path)
@@ -52,6 +55,10 @@ def set_file(current_dir):
             file3.write(desktop_path)
             # 将 installationPackageLink 写入 installationPackageLink.txt
             file4.write(installation_package_path)
+            # 将 download_path 写入 DownloadLink.txt
+            file5.write(download_path)
+            # Task flow lock file: false means idle, true means one RPA is running.
+            file6.write("false")
     except FileExistsError:
         print("文件夹已存在，无需重复创建。")
     except PermissionError:
