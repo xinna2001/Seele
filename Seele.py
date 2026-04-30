@@ -245,11 +245,6 @@ class DesktopWife(QWidget):
         self.BubbleTimer.setInterval(30000)  # ~30s
         self.BubbleTimer.timeout.connect(self.RandomWindowMessage)
         self.BubbleTimer.start()
-        # Queue-status bubble has higher priority than the regular random bubble.
-        self.QueueStatusTimer = QTimer(self)
-        self.QueueStatusTimer.setInterval(15000)
-        self.QueueStatusTimer.timeout.connect(self.ShowQueueStatusBubble)
-        self.QueueStatusTimer.start()
         self._first_bubble_done = False
 
         self._Tray = Tray.TrayIcon(self)
@@ -391,10 +386,6 @@ class DesktopWife(QWidget):
             self.BubbleTimer.stop()
         except Exception:
             pass
-        try:
-            self.QueueStatusTimer.stop()
-        except Exception:
-            pass
 
     def _resume_bubble(self) -> None:
         # Resume periodic popups when main window is visible.
@@ -403,34 +394,6 @@ class DesktopWife(QWidget):
                 self.BubbleTimer.start()
         except Exception:
             pass
-        try:
-            if not self.QueueStatusTimer.isActive():
-                self.QueueStatusTimer.start()
-        except Exception:
-            pass
-
-    def _current_priority_bubble_text(self) -> str:
-        """
-        Queue status bubble overrides the regular random bubble when available.
-        """
-        try:
-            return VoiceToText.get_queue_status_message() or ""
-        except Exception:
-            return ""
-
-    def ShowQueueStatusBubble(self) -> None:
-        """
-        Show queue execution status every 15 seconds, but only for multi-task queue mode.
-        This has higher priority than the normal random speech bubble.
-        """
-        if not self.isVisible() or self.isMinimized():
-            return
-        text = self._current_priority_bubble_text()
-        if not text:
-            return
-        self._bubble.set_text(text)
-        self._bubble.show_at(self._bubble_global_pos())
-        self._bubble_hide_timer.start(6500)
 
     def _WindowMenu(self, _pos=None) -> None:
         """
@@ -528,9 +491,6 @@ class DesktopWife(QWidget):
         if not self.isVisible() or self.isMinimized():
             return
         if getattr(self, "_bubble", None) is None:
-            return
-        # Queue-status bubble takes precedence over the regular random bubble.
-        if self._current_priority_bubble_text():
             return
         templates = getattr(self, "_bubble_templates", None) or ["{name}正在工作呢~"]
         tmpl = random.choice(templates)

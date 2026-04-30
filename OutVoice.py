@@ -35,7 +35,7 @@ class main(QWidget):
         self.card.setStyleSheet(
             "#voice_card { background-color: rgba(255, 255, 255, 210); border-radius: 22px; }"
             "QLabel { color: #111; }"
-            "QPushButton { border-radius: 18px; padding: 14px 22px; font-size: 22px; }"
+            "QPushButton { border-radius: 18px; padding: 14px 22px; font-size: 24px; }"
         )
 
         main_layout = QVBoxLayout(self.card)
@@ -48,7 +48,7 @@ class main(QWidget):
         main_layout.addWidget(title)
 
         tip = QLabel("请选择是否启用语音输入", self.card)
-        tip.setStyleSheet("font-size: 18px;")
+        tip.setStyleSheet("font-size: 24px;")
         tip.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(tip)
 

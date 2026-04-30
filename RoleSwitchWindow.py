@@ -73,19 +73,19 @@ class main(QWidget):
         self.btn_aili.setText("爱莉希雅")
         self.btn_aili.clicked.connect(self.select_aili)
         self.btn_aili.setMinimumHeight(82)
-        self.btn_aili.setStyleSheet("font-size: 22px;")
+        self.btn_aili.setStyleSheet("font-size: 24px;")
 
         self.btn_furina = QPushButton(self)
         self.btn_furina.setText("芙宁娜")
         self.btn_furina.clicked.connect(self.select_furina)
         self.btn_furina.setMinimumHeight(82)
-        self.btn_furina.setStyleSheet("font-size: 22px;")
+        self.btn_furina.setStyleSheet("font-size: 24px;")
 
         self.btn_xier = QPushButton(self)
         self.btn_xier.setText("希儿")
         self.btn_xier.clicked.connect(self.select_xier)
         self.btn_xier.setMinimumHeight(82)
-        self.btn_xier.setStyleSheet("font-size: 22px;")
+        self.btn_xier.setStyleSheet("font-size: 24px;")
 
         buttons_layout.addWidget(self.btn_aili)
         buttons_layout.addWidget(self.btn_furina)

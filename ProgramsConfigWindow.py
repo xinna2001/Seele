@@ -114,18 +114,18 @@ class ManageWakeWordsWindow(QWidget):
         main_layout.addWidget(title)
 
         tip = QLabel("这里只显示用户新增的唤醒词（预设工作流不会出现在这里）", self.card)
-        tip.setStyleSheet("font-size: 20px;")
+        tip.setStyleSheet("font-size: 24px;")
         tip.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(tip)
 
         header = QHBoxLayout()
         header.setSpacing(12)
         h_word = QLabel("唤醒词", self.card)
-        h_word.setStyleSheet("font-size: 22px; font-weight: 600;")
+        h_word.setStyleSheet("font-size: 24px; font-weight: 600;")
         h_val = QLabel(self._value_label(), self.card)
-        h_val.setStyleSheet("font-size: 22px; font-weight: 600;")
+        h_val.setStyleSheet("font-size: 24px; font-weight: 600;")
         h_ops = QLabel("操作", self.card)
-        h_ops.setStyleSheet("font-size: 22px; font-weight: 600;")
+        h_ops.setStyleSheet("font-size: 24px; font-weight: 600;")
         # Keep the operations area visible; let value column expand/shrink.
         h_word.setFixedWidth(260)
         h_ops.setFixedWidth(280)
@@ -194,7 +194,7 @@ class ManageWakeWordsWindow(QWidget):
 
         if not items:
             empty = QLabel("暂无可修改的唤醒词（只显示用户新增项）。", self.list_container)
-            empty.setStyleSheet("font-size: 20px; color: #333;")
+            empty.setStyleSheet("font-size: 24px; color: #333;")
             self.list_layout.addWidget(empty)
             self._row_widgets.append(empty)
             self.list_layout.addStretch(1)
@@ -208,12 +208,12 @@ class ManageWakeWordsWindow(QWidget):
             row_layout.setSpacing(12)
 
             word_lbl = QLabel(str(word), row)
-            word_lbl.setStyleSheet("font-size: 22px;")
+            word_lbl.setStyleSheet("font-size: 24px;")
             word_lbl.setFixedWidth(260)
 
             full_val = "" if val is None else str(val)
             val_lbl = QLabel(full_val, row)
-            val_lbl.setStyleSheet("font-size: 20px;")
+            val_lbl.setStyleSheet("font-size: 24px;")
             # Let the value column shrink; show full value on hover.
             val_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
             val_lbl.setToolTip(full_val)
@@ -377,7 +377,7 @@ class _EditWakeWordDialog(QWidget):
         self.card.setStyleSheet(
             "#edit_card { background-color: rgba(255, 255, 255, 210); border-radius: 22px; }"
             "QLabel { color: #111; }"
-            "QLineEdit { border-radius: 16px; padding: 12px 14px; font-size: 22px; }"
+            "QLineEdit { border-radius: 16px; padding: 12px 14px; font-size: 24px; }"
             "QPushButton { border-radius: 18px; padding: 14px 22px; font-size: 24px; }"
         )
 
@@ -391,7 +391,7 @@ class _EditWakeWordDialog(QWidget):
         main_layout.addWidget(title)
 
         tip = QLabel("你可以修改或删除该唤醒词。", self.card)
-        tip.setStyleSheet("font-size: 20px;")
+        tip.setStyleSheet("font-size: 24px;")
         tip.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(tip)
 
@@ -507,8 +507,8 @@ class main(QWidget):
         self.card.setStyleSheet(
             "#config_card { background-color: rgba(255, 255, 255, 210); border-radius: 22px; }"
             "QLabel { color: #111; }"
-            "QLineEdit { border-radius: 16px; padding: 12px 14px; font-size: 18px; }"
-            "QPushButton { border-radius: 18px; padding: 14px 22px; font-size: 22px; }"
+            "QLineEdit { border-radius: 16px; padding: 12px 14px; font-size: 24px; }"
+            "QPushButton { border-radius: 18px; padding: 14px 22px; font-size: 24px; }"
         )
 
         main_layout = QVBoxLayout(self.card)
@@ -521,7 +521,7 @@ class main(QWidget):
         main_layout.addWidget(title)
 
         tip = QLabel("输入 uid 和唤醒词，留空则不记录", self.card)
-        tip.setStyleSheet("font-size: 18px;")
+        tip.setStyleSheet("font-size: 24px;")
         tip.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(tip)
 
@@ -529,7 +529,7 @@ class main(QWidget):
         form_layout.setSpacing(16)
 
         label = QLabel("输入 uid 和唤醒词", self.card)
-        label.setStyleSheet("font-size: 20px; font-weight: 600;")
+        label.setStyleSheet("font-size: 24px; font-weight: 600;")
         form_layout.addWidget(label)
 
         self.uid_text = QLineEdit(self.card)
@@ -651,8 +651,8 @@ class main2(QWidget):
         self.card.setStyleSheet(
             "#config_card { background-color: rgba(255, 255, 255, 210); border-radius: 22px; }"
             "QLabel { color: #111; }"
-            "QLineEdit { border-radius: 16px; padding: 12px 14px; font-size: 18px; }"
-            "QPushButton { border-radius: 18px; padding: 14px 22px; font-size: 22px; }"
+            "QLineEdit { border-radius: 16px; padding: 12px 14px; font-size: 24px; }"
+            "QPushButton { border-radius: 18px; padding: 14px 22px; font-size: 24px; }"
         )
 
         main_layout = QVBoxLayout(self.card)
@@ -665,7 +665,7 @@ class main2(QWidget):
         main_layout.addWidget(title)
 
         tip = QLabel("输入文件名和唤醒词，留空则不记录", self.card)
-        tip.setStyleSheet("font-size: 18px;")
+        tip.setStyleSheet("font-size: 24px;")
         tip.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(tip)
 
@@ -673,7 +673,7 @@ class main2(QWidget):
         form_layout.setSpacing(16)
 
         label = QLabel("输入 txt 文件名称和唤醒词", self.card)
-        label.setStyleSheet("font-size: 20px; font-weight: 600;")
+        label.setStyleSheet("font-size: 24px; font-weight: 600;")
         form_layout.addWidget(label)
 
         self.uid_text = QLineEdit(self.card)

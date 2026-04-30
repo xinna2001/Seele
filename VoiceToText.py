@@ -10,14 +10,6 @@ import keyboard
 import play_vioce as pv
 import falseIntent as fi
 CONTROLLER = True
-_TASK_QUEUE = []
-_QUEUE_LOCK = threading.Lock()
-_CURRENT_TASK = None
-_BATCH_TOTAL = 0
-_CURRENT_BATCH_INDEX = 0
-_MULTI_QUEUE_ACTIVE = False
-_LAST_QUEUE_CHECK = 0.0
-_QUEUE_CHECK_INTERVAL = 1.0
 
 
 def get_base_dir():
@@ -30,68 +22,6 @@ def get_tools_folder_path():
     if os.path.isdir(r"D:\\"):
         return r"D:\SeeleTools"
     return r"C:\SeeleTools"
-
-
-def get_task_flow_file_path():
-    return os.path.join(get_tools_folder_path(), "TaskFlow.txt")
-
-
-def ensure_task_flow_file():
-    folder = get_tools_folder_path()
-    try:
-        os.makedirs(folder, exist_ok=True)
-    except OSError:
-        return
-    path = get_task_flow_file_path()
-    if not os.path.exists(path):
-        try:
-            with open(path, "w", encoding="utf-8") as fp:
-                fp.write("false")
-        except OSError:
-            pass
-
-
-def read_task_flow_state() -> str:
-    ensure_task_flow_file()
-    try:
-        with open(get_task_flow_file_path(), "r", encoding="utf-8") as fp:
-            return (fp.read() or "").strip().lower()
-    except OSError:
-        return "false"
-
-
-def write_task_flow_state(value: str) -> None:
-    ensure_task_flow_file()
-    try:
-        with open(get_task_flow_file_path(), "w", encoding="utf-8") as fp:
-            fp.write("true" if str(value).strip().lower() == "true" else "false")
-    except OSError:
-        pass
-
-
-def is_queue_busy() -> bool:
-    with _QUEUE_LOCK:
-        return bool(_CURRENT_TASK or _TASK_QUEUE)
-
-
-def get_queue_status_message() -> str:
-    with _QUEUE_LOCK:
-        if not _MULTI_QUEUE_ACTIVE:
-            return ""
-        if not _CURRENT_TASK:
-            return ""
-        if _BATCH_TOTAL <= 1 or _CURRENT_BATCH_INDEX <= 0:
-            return ""
-        return f"正在执行 {_CURRENT_BATCH_INDEX}/{_BATCH_TOTAL}：{_CURRENT_TASK}"
-
-
-def _reset_batch_state_if_idle() -> None:
-    global _BATCH_TOTAL, _CURRENT_BATCH_INDEX, _MULTI_QUEUE_ACTIVE
-    with _QUEUE_LOCK:
-        if _CURRENT_TASK is None and not _TASK_QUEUE:
-            _BATCH_TOTAL = 0
-            _CURRENT_BATCH_INDEX = 0
-            _MULTI_QUEUE_ACTIVE = False
 
 
 # Cross-thread input requests: keyboard callback thread -> Qt main thread.
@@ -160,7 +90,7 @@ def _create_input_dialog_qt():
                 "#input_card { background-color: rgba(255, 255, 255, 210); border-radius: 22px; }"
                 "QLabel { color: #111; }"
                 "QPlainTextEdit { border-radius: 16px; padding: 18px 18px; font-size: 26px; }"
-                "QPushButton { border-radius: 18px; padding: 14px 22px; font-size: 22px; }"
+                "QPushButton { border-radius: 18px; padding: 14px 22px; font-size: 24px; }"
             )
 
             main = QVBoxLayout(card)
@@ -174,13 +104,13 @@ def _create_input_dialog_qt():
             title.setAlignment(Qt.AlignCenter)
             main.addWidget(title)
 
-            tip = QLabel("支持多行输入，使用中英文分号分隔多个任务，Ctrl+Enter快速提交", card)
-            tip.setStyleSheet("font-size: 18px;")
+            tip = QLabel("支持多行输入，Ctrl+Enter快速提交", card)
+            tip.setStyleSheet("font-size: 24px;")
             tip.setAlignment(Qt.AlignCenter)
             main.addWidget(tip)
 
             self.edit = QPlainTextEdit(card)
-            self.edit.setPlaceholderText("示例：下载ppt；生成网页；点星")
+            self.edit.setPlaceholderText("在这里输入...")
             # Auto wrap at widget width, no horizontal scrollbar.
             self.edit.setLineWrapMode(QPlainTextEdit.WidgetWidth)
             self.edit.setWordWrapMode(QTextOption.WrapAtWordBoundaryOrAnywhere)
@@ -403,21 +333,6 @@ def cmd_yingdao(uid):
         return False
 
 
-def _normalize_single_intent(text: str) -> str:
-    raw = "" if text is None else str(text).strip()
-    if not raw:
-        return ""
-    return fi.main(raw)
-
-
-def _split_multiple_intents(text: str):
-    if not text:
-        return []
-    normalized = str(text).replace("；", ";")
-    parts = [item.strip() for item in normalized.split(";")]
-    return [item for item in parts if item]
-
-
 def _trigger_single_task(text: str) -> bool:
     if not text:
         return False
@@ -439,71 +354,15 @@ def _trigger_single_task(text: str) -> bool:
         pv.main("4.wav")
         return False
 
-
-def _start_next_task_if_possible() -> None:
-    global _CURRENT_TASK, _CURRENT_BATCH_INDEX
-    with _QUEUE_LOCK:
-        if _CURRENT_TASK is not None:
-            return
-        if not _TASK_QUEUE:
-            return
-        next_task = _TASK_QUEUE.pop(0)
-        next_index = _CURRENT_BATCH_INDEX + 1 if _MULTI_QUEUE_ACTIVE else 0
-
-    ok = _trigger_single_task(next_task)
-    if ok:
-        write_task_flow_state("true")
-        with _QUEUE_LOCK:
-            _CURRENT_TASK = next_task
-            if _MULTI_QUEUE_ACTIVE:
-                _CURRENT_BATCH_INDEX = next_index
-    else:
-        # Failed to start this task, try the next one on the next tick.
-        with _QUEUE_LOCK:
-            _CURRENT_TASK = None
-        _reset_batch_state_if_idle()
-
-
-def _process_queue_tick() -> None:
-    global _CURRENT_TASK
-    with _QUEUE_LOCK:
-        has_current = _CURRENT_TASK is not None
-        has_pending = bool(_TASK_QUEUE)
-    if not has_current and has_pending:
-        _start_next_task_if_possible()
-        return
-    if not has_current:
-        _reset_batch_state_if_idle()
-        return
-    if read_task_flow_state() == "false":
-        with _QUEUE_LOCK:
-            _CURRENT_TASK = None
-        _start_next_task_if_possible()
-        _reset_batch_state_if_idle()
-
 def text_intent(text):
-    global _BATCH_TOTAL, _CURRENT_BATCH_INDEX, _MULTI_QUEUE_ACTIVE
     if not text or not str(text).strip():
         return
     pv.main("3.wav")
-    tasks = [_normalize_single_intent(item) for item in _split_multiple_intents(text)]
-    tasks = [item for item in tasks if item]
-    if not tasks:
-        return
-    with _QUEUE_LOCK:
-        if _CURRENT_TASK is None and not _TASK_QUEUE:
-            _BATCH_TOTAL = len(tasks)
-            _CURRENT_BATCH_INDEX = 0
-            _MULTI_QUEUE_ACTIVE = len(tasks) > 1
-        _TASK_QUEUE.extend(tasks)
-    _start_next_task_if_possible()
+    text = fi.main(text)
+    _trigger_single_task(text)
 
 
 def _handle_hotkey():
-    if is_queue_busy() or read_task_flow_state() == "true":
-        # A queued/running workflow is in progress. Block opening a new input dialog.
-        pv.main("6.wav")
-        return
     text = get_user_input()
     if not text or not text.strip():
         return
@@ -511,18 +370,13 @@ def _handle_hotkey():
 
 
 def main():
-    global CONTROLLER, _LAST_QUEUE_CHECK
+    global CONTROLLER
     hotkey = 'ctrl+`'
     # 添加热键（仅添加一次）
     keyboard.add_hotkey(hotkey, _handle_hotkey)
-    ensure_task_flow_file()
 
     try:
         while CONTROLLER:
-            now = time.time()
-            if now - _LAST_QUEUE_CHECK >= _QUEUE_CHECK_INTERVAL:
-                _LAST_QUEUE_CHECK = now
-                _process_queue_tick()
             time.sleep(0.1)  # 空循环保持线程运行
     finally:
         # 退出时移除热键并停止监听
