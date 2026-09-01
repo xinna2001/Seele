@@ -74,15 +74,17 @@ class main(QWidget):
         self.setLayout(root_layout)
 
     def YesEvent(self) -> None:
-        dic = write_file.read_dict_from_json('state.json')
+        path = os.path.join(get_base_dir(), "state.json")
+        dic = write_file.read_dict_from_json(path) or {}
         dic["startup_mode"] = "fast"
-        write_file.write_dict_to_json(dic, 'state.json')
+        write_file.write_dict_to_json(dic, path)
         self.close()
 
     def hide_event(self) -> None:
-        dic = write_file.read_dict_from_json('state.json')
+        path = os.path.join(get_base_dir(), "state.json")
+        dic = write_file.read_dict_from_json(path) or {}
         dic["startup_mode"] = "slow"
-        write_file.write_dict_to_json(dic, 'state.json')
+        write_file.write_dict_to_json(dic, path)
         self.close()
 
     def paintEvent(self, event):

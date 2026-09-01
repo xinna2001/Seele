@@ -1,0 +1,15 @@
+{
+  "enabled": false,
+  "dashboard_url": "http://127.0.0.1:7891",
+  "dashboard_token": "",
+  "bot_id": "",
+  "events_enabled": true,
+  "route_unmatched_input": true,
+  "request_timeout_seconds": 8,
+  "bridge": {
+    "enabled": false,
+    "host": "127.0.0.1",
+    "port": 8765,
+    "token": "replace-with-a-long-random-token"
+  }
+}

@@ -131,3 +131,11 @@ dmypy.json
 # Ignore installer packages
 installationPackage/*.exe
 
+# Local integrations and runtime state
+botmux/
+botmux_config.json
+.seele/
+botmux-skill/dist/
+botmux-skill/config.json
+.DS_Store
+

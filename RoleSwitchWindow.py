@@ -5,7 +5,7 @@ import write_file as wf
 
 from PyQt5.QtCore import Qt, QPoint
 from PyQt5.QtGui import QIcon, QPainter, QPainterPath, QPixmap
-from PyQt5.QtWidgets import QWidget, QPushButton, QLabel, QVBoxLayout, QHBoxLayout, QMessageBox, QFrame
+from PyQt5.QtWidgets import QWidget, QPushButton, QLabel, QVBoxLayout, QHBoxLayout, QMessageBox, QFrame, QDialog
 from PyQt5.QtCore import QRectF
 
 
@@ -17,6 +17,108 @@ def get_base_dir():
 
 def _json_path(name):
     return os.path.join(get_base_dir(), name)
+
+
+class NonXierVoiceTipDialog(QDialog):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("音色说明")
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self._drag_pos = None
+        self._bg = QPixmap(os.path.join(get_base_dir(), "image", "bs.png"))
+        self.resize(800, 750)
+
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(18, 18, 18, 18)
+        root_layout.setSpacing(14)
+
+        card = QFrame(self)
+        card.setObjectName("voice_tip_card")
+        card.setStyleSheet(
+            "#voice_tip_card {"
+            "  background-color: rgba(255, 255, 255, 220);"
+            "  border-radius: 22px;"
+            "}"
+            "QLabel { color: #111; }"
+            "QPushButton {"
+            "  border-radius: 18px;"
+            "  padding: 14px 22px;"
+            "  font-size: 24px;"
+            "}"
+        )
+
+        main_layout = QVBoxLayout(card)
+        main_layout.setContentsMargins(34, 30, 34, 30)
+        main_layout.setSpacing(22)
+
+        title = QLabel("音色说明", card)
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 28px; font-weight: 600;")
+
+        content = QLabel(
+            "兄弟，你知道的，真的是因为精力不够，所以没有训练 爱莉希雅呀和 芙宁娜的音色。"
+            "绝对不是因为喜欢希儿，故意只用了这一个音色的",
+            card,
+        )
+        content.setWordWrap(True)
+        content.setAlignment(Qt.AlignCenter)
+        content.setStyleSheet("font-size: 24px; line-height: 1.5;")
+
+        ok_btn = QPushButton("知道了", card)
+        ok_btn.setMinimumHeight(72)
+        ok_btn.setStyleSheet(
+            "QPushButton { background-color: #4f8cff; color: white; }"
+            "QPushButton:hover { background-color: #3b74df; }"
+        )
+        ok_btn.clicked.connect(self.accept)
+
+        main_layout.addWidget(title)
+        main_layout.addWidget(content)
+        main_layout.addWidget(ok_btn)
+
+        card.setFixedSize(720, 390)
+        root_layout.addStretch(2)
+        root_layout.addWidget(card, 0, Qt.AlignCenter)
+        root_layout.addStretch(2)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        rect = QRectF(self.rect())
+        path = QPainterPath()
+        path.addRoundedRect(rect.adjusted(0, 0, -1, -1), 22.0, 22.0)
+        painter.setClipPath(path)
+
+        if not self._bg.isNull():
+            scaled = self._bg.scaled(self.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+            x = int((rect.width() - scaled.width()) / 2)
+            y = int((rect.height() - scaled.height()) / 2)
+            painter.drawPixmap(x, y, scaled)
+        else:
+            painter.fillRect(rect, Qt.white)
+
+        super().paintEvent(event)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            self._drag_pos = event.globalPos() - self.frameGeometry().topLeft()
+            event.accept()
+
+    def mouseMoveEvent(self, event) -> None:
+        if (event.buttons() & Qt.LeftButton) and self._drag_pos is not None:
+            self.move(event.globalPos() - self._drag_pos)
+            event.accept()
+
+    def mouseReleaseEvent(self, event) -> None:
+        self._drag_pos = None
+        event.accept()
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key_Escape:
+            self.accept()
+            return
+        super().keyPressEvent(event)
 
 
 class main(QWidget):
@@ -151,6 +253,9 @@ class main(QWidget):
             return
         # 保存角色设置到 state.json
         dic = wf.read_dict_from_json(_json_path('state.json')) or {}
+        if role_key != "xier" and dic.get("non_xier_voice_tip_shown") != "1":
+            NonXierVoiceTipDialog(self).exec_()
+            dic["non_xier_voice_tip_shown"] = "1"
         dic["character"] = role_key
         wf.write_dict_to_json(dic, _json_path('state.json'))
         self.close()

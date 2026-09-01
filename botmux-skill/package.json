@@ -1,0 +1,29 @@
+{
+  "name": "@xinna2001/botmux-plugin-seele",
+  "version": "0.1.0",
+  "description": "Botmux plugin for allowlisted Seele and Yingdao RPA workflows.",
+  "type": "module",
+  "keywords": [
+    "botmux-plugin",
+    "seele",
+    "yingdao",
+    "rpa"
+  ],
+  "scripts": {
+    "build": "node ./scripts/build.mjs",
+    "validate": "node ./scripts/validate.mjs",
+    "test": "npm run build && npm run validate && node ./scripts/smoke.mjs"
+  },
+  "botmux": {
+    "schemaVersion": 1,
+    "id": "seele",
+    "displayName": "Seele RPA"
+  },
+  "files": [
+    "dist/"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT"
+}

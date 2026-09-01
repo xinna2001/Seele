@@ -1,0 +1,7 @@
+{
+  "bridgeUrl": "http://127.0.0.1:8765",
+  "bridgeToken": "same-token-as-botmux_config.json",
+  "allowedOpenIds": [
+    "ou_your_feishu_open_id"
+  ]
+}

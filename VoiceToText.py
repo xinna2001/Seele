@@ -1,27 +1,42 @@
 import write_file as wf
 import os
-import sys
-import subprocess
 import threading
 import time
 from queue import Queue, Empty
-import pyautogui
-import keyboard
 import play_vioce as pv
 import falseIntent as fi
+import botmux_client
+import rpa_service
+from platform_utils import app_path, get_base_dir as _get_base_dir, get_tools_dir
+
+try:
+    import keyboard
+except Exception:
+    keyboard = None
+
+try:
+    import pyautogui
+except Exception:
+    pyautogui = None
+
+try:
+    from pynput.keyboard import GlobalHotKeys
+except Exception:
+    GlobalHotKeys = None
+
 CONTROLLER = True
 
 
 def get_base_dir():
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+    return str(_get_base_dir())
 
 
 def get_tools_folder_path():
-    if os.path.isdir(r"D:\\"):
-        return r"D:\SeeleTools"
-    return r"C:\SeeleTools"
+    return str(get_tools_dir())
+
+
+def _json_path(name):
+    return str(app_path(name))
 
 
 # Cross-thread input requests: keyboard callback thread -> Qt main thread.
@@ -30,24 +45,19 @@ _QT_POLL_TIMER = None
 _ACTIVE_INPUT_DIALOG = None
 
 def run_tasklist():
-    # 使用 cmd 执行 tasklist 命令
-    # 使用 cmd 执行 tasklist 命令
-    cmd = 'tasklist /fi "imagename eq ShadowBotBrowser*"'
-    # 使用 subprocess 执行命令
-    result = subprocess.run(
-        cmd,
-        shell=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
-    # 获取标准输出和错误输出
-    stdout = result.stdout
-    return stdout
+    return "ShadowBotBrowser" if rpa_service.is_shadowbot_running() else ""
+
+
+def is_shadowbot_running():
+    return rpa_service.is_shadowbot_running()
 
 def _execute_win_h_if_enabled():
     try:
-        if (wf.read_dict_from_json("state.json") or {}).get("stt_state") == "True":
+        if (
+            os.name == "nt"
+            and pyautogui is not None
+            and (wf.read_dict_from_json(_json_path("state.json")) or {}).get("stt_state") == "True"
+        ):
             pyautogui.hotkey("win", "h")
     except Exception:
         pass
@@ -279,58 +289,19 @@ def _poll_input_requests():
         except Exception:
             pass
 def file_yingdao(text):
-    if ".txt" in text:
-        text = text[:-4]
-    text = text.replace(" ", "")
-    name = (wf.read_dict_from_json("file_name.json") or {}).get(text)
-    if not name:
-        return False
-    command = f'cmd /c echo . >"{os.path.join(get_tools_folder_path(), name + ".txt")}"'
-    # 创建启动信息对象以隐藏窗口
-    startup_info = subprocess.STARTUPINFO()
-    startup_info.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    startup_info.wShowWindow = subprocess.SW_HIDE
-    try:
-        # 执行命令并隐藏窗口
-        subprocess.run(command, shell=True, check=True, text=True,
-                       capture_output=True, startupinfo=startup_info)
-        return True
-    except subprocess.CalledProcessError:
-        return False
+    result = rpa_service.trigger_workflow(
+        str(text).removesuffix(".txt").replace(" ", ""),
+        startup_mode="fast",
+    )
+    return result.ok
+
+
 def cmd_yingdao(uid):
-    uid = str(uid)
-    user_profile = os.environ.get("USERPROFILE") or os.path.expanduser("~")
-    desktop_dirs = [os.path.join(user_profile, "Desktop")]
-    public_profile = os.environ.get("PUBLIC")
-    if public_profile:
-        desktop_dirs.append(os.path.join(public_profile, "Desktop"))
-    for key in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial"):
-        onedrive = os.environ.get(key)
-        if onedrive:
-            desktop_dirs.append(os.path.join(onedrive, "Desktop"))
+    return rpa_service.open_shadowbot(str(uid))
 
-    link_path = None
-    for desktop_dir in desktop_dirs:
-        candidate = os.path.join(desktop_dir, "影刀.lnk")
-        if os.path.exists(candidate):
-            link_path = candidate
-            break
-    if link_path is None:
-        link_path = os.path.join(desktop_dirs[0], "影刀.lnk")
 
-    print(f"\"{link_path}\" shadowbot:Run?robot-uuid={uid}")
-    command = f"\"{link_path}\" shadowbot:Run?robot-uuid={uid}"
-    # 创建启动信息对象以隐藏窗口
-    startup_info = subprocess.STARTUPINFO()
-    startup_info.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    startup_info.wShowWindow = subprocess.SW_HIDE
-    try:
-        # 执行命令并隐藏窗口
-        subprocess.run(command, shell=True, check=True, text=True,
-                       capture_output=True, startupinfo=startup_info)
-        return True
-    except subprocess.CalledProcessError:
-        return False
+def cmd_yingdao_direct(uid):
+    return rpa_service.open_shadowbot(str(uid))
 
 
 def _trigger_single_task(text: str) -> bool:
@@ -339,27 +310,41 @@ def _trigger_single_task(text: str) -> bool:
     if text == "创建工作":
         return cmd_yingdao("")
     try:
-        if (wf.read_dict_from_json("state.json") or {}).get('startup_mode') == "fast":
-            if "没有运行的任务" in run_tasklist():
-                pv.main("11.wav")
-                return False
-            return file_yingdao(text)
-        data = wf.read_dict_from_json("uid.json") or {}
-        uid = data.get(text, -1)
-        if uid == -1:
-            pv.main("4.wav")
-            return False
-        return cmd_yingdao(uid)
+        result = rpa_service.trigger_workflow(text)
+        if not result.ok:
+            pv.main("11.wav" if result.code == "shadowbot_not_running" else "4.wav")
+        return result.ok
     except Exception:
         pv.main("4.wav")
+        return False
+
+
+def _is_known_workflow(text: str) -> bool:
+    return rpa_service.resolve_workflow(text) is not None
+
+
+def _trigger_botmux(text: str) -> bool:
+    config = botmux_client.load_config()
+    if not config.get("enabled") or not config.get("route_unmatched_input", True):
+        return False
+    try:
+        botmux_client.BotmuxClient(config).trigger(text)
+        return True
+    except botmux_client.BotmuxError as exc:
+        print(f"Botmux 触发失败: {exc}")
         return False
 
 def text_intent(text):
     if not text or not str(text).strip():
         return
     pv.main("3.wav")
-    text = fi.main(text)
-    _trigger_single_task(text)
+    original = str(text).strip()
+    normalized = fi.main(original)
+    if normalized == "创建工作" or _is_known_workflow(normalized):
+        _trigger_single_task(normalized)
+        return
+    if not _trigger_botmux(original):
+        pv.main("4.wav")
 
 
 def _handle_hotkey():
@@ -372,20 +357,45 @@ def _handle_hotkey():
 def main():
     global CONTROLLER
     hotkey = 'ctrl+`'
-    # 添加热键（仅添加一次）
-    keyboard.add_hotkey(hotkey, _handle_hotkey)
-
+    if os.name != "nt" and GlobalHotKeys is not None:
+        listener = None
+        try:
+            listener = GlobalHotKeys({"<ctrl>+`": _handle_hotkey})
+            listener.start()
+            while CONTROLLER:
+                time.sleep(0.1)
+            return
+        except Exception as exc:
+            print(f"pynput 全局热键不可用，尝试 keyboard 后端: {exc}")
+        finally:
+            if listener is not None:
+                try:
+                    listener.stop()
+                except Exception:
+                    pass
+    if keyboard is None:
+        return
+    registered = False
     try:
+        keyboard.add_hotkey(hotkey, _handle_hotkey)
+        registered = True
         while CONTROLLER:
-            time.sleep(0.1)  # 空循环保持线程运行
+            time.sleep(0.1)
+    except Exception as exc:
+        print(f"全局热键不可用，可通过右键菜单打开输入框: {exc}")
     finally:
-        # 退出时移除热键并停止监听
-        keyboard.remove_hotkey(hotkey)
-        keyboard.unhook_all()
+        if registered:
+            try:
+                keyboard.remove_hotkey(hotkey)
+                keyboard.unhook_all()
+            except Exception:
+                pass
 
 
 def run() -> None:
-    start = threading.Thread(target=main)
+    global CONTROLLER
+    CONTROLLER = True
+    start = threading.Thread(target=main, name="seele-global-hotkey", daemon=True)
     start.start()
     # Install Qt poller timer (main thread) so hotkey thread can request UI safely.
     global _QT_POLL_TIMER
@@ -400,3 +410,12 @@ def run() -> None:
             _QT_POLL_TIMER.start()
     except Exception:
         pass
+
+
+def request_input() -> None:
+    threading.Thread(target=_handle_hotkey, name="seele-input-request", daemon=True).start()
+
+
+def stop() -> None:
+    global CONTROLLER
+    CONTROLLER = False

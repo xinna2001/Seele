@@ -3,12 +3,7 @@ import sys
 import tempfile
 import uuid
 import subprocess
-
-def _startup_hidden():
-    s = subprocess.STARTUPINFO()
-    s.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    s.wShowWindow = subprocess.SW_HIDE
-    return s
+from platform_utils import hidden_subprocess_kwargs
 
 def _pythonw():
     exe = sys.executable
@@ -28,8 +23,7 @@ def _spawn_splash(ready_file):
         cmd,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        startupinfo=_startup_hidden(),
-        creationflags=subprocess.CREATE_NO_WINDOW,
+        **hidden_subprocess_kwargs(),
     )
 
 def _run_splash(ready_file):

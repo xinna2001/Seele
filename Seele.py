@@ -14,7 +14,11 @@ import StartupMode
 import write_file as wf
 import ProgramsConfigWindow
 import RoleSwitchWindow
-from PyQt5.QtCore import Qt, QSize, QPoint
+import botmux_client
+import rpa_bridge
+import rpa_service
+from platform_utils import open_external
+from PyQt5.QtCore import Qt, QSize, QPoint, QObject, pyqtSignal
 from PyQt5.QtGui import QIcon, QFontMetrics
 from PyQt5.QtCore import QRectF
 from PyQt5.QtGui import QPixmap
@@ -29,6 +33,11 @@ from PyQt5.QtGui import QPainterPath
 from PyQt5.QtGui import QIcon, QMovie
 from PyQt5.QtWidgets import QDesktopWidget
 from PyQt5.QtWidgets import QMessageBox, QApplication
+
+
+class _IntegrationSignals(QObject):
+    botmux_state = pyqtSignal(dict)
+    rpa_event = pyqtSignal(dict)
 
 def _apply_material_theme(app: QApplication) -> None:
     """
@@ -196,6 +205,8 @@ class DesktopWife(QWidget):
             gif_path = os.path.join(get_base_dir(), "image", gif_name)
         else:  # xier 或默认
             gif_path = os.path.join(get_base_dir(), "image", "bss.gif")
+        self._base_gif_path = gif_path
+        self._current_gif_path = gif_path
         self.movie = QMovie(gif_path)
         # # 设置播放速度为原始速度的 X%
         self.movie.setSpeed(95)
@@ -214,7 +225,8 @@ class DesktopWife(QWidget):
         )
 
         # 设置窗口属性
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.SubWindow)
+        window_type = Qt.SubWindow if sys.platform == "win32" else Qt.Tool
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | window_type)
         self.setAutoFillBackground(False)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
 
@@ -249,6 +261,163 @@ class DesktopWife(QWidget):
 
         self._Tray = Tray.TrayIcon(self)
         self.outvoice = OutVoice.main()
+        self._botmux_config = botmux_client.load_config()
+        self._botmux_state = {
+            "connected": False,
+            "kind": "offline",
+            "active": 0,
+            "attention": 0,
+            "session": None,
+            "error": "",
+        }
+        self._rpa_state = None
+        self._botmux_signature = None
+        self._integration_signals = _IntegrationSignals(self)
+        self._integration_signals.botmux_state.connect(self._handle_botmux_state)
+        self._integration_signals.rpa_event.connect(self._handle_rpa_event)
+        self._unsubscribe_rpa_events = rpa_service.subscribe_job_events(
+            self._integration_signals.rpa_event.emit,
+        )
+        self._botmux_monitor = botmux_client.BotmuxMonitor(
+            self._integration_signals.botmux_state.emit,
+            self._botmux_config,
+        )
+        self._rpa_bridge = rpa_bridge.RpaBridge(
+            self._botmux_config.get("bridge") or {},
+            self._integration_signals.rpa_event.emit,
+        )
+        QTimer.singleShot(0, self._start_integrations)
+
+    def _start_integrations(self) -> None:
+        self._botmux_monitor.start()
+        try:
+            self._rpa_bridge.start()
+        except (OSError, RuntimeError, ValueError) as exc:
+            self._handle_rpa_event({
+                "type": "rpa.bridge",
+                "state": "error",
+                "message": str(exc),
+            })
+
+    def _handle_botmux_state(self, state: dict) -> None:
+        self._botmux_state = state
+        session = state.get("session") if isinstance(state.get("session"), dict) else {}
+        signature = (
+            state.get("connected"),
+            state.get("kind"),
+            state.get("active"),
+            state.get("attention"),
+            session.get("sessionId"),
+            session.get("status"),
+            session.get("title"),
+            str(session.get("agentAttention") or ""),
+        )
+        changed = signature != self._botmux_signature
+        self._botmux_signature = signature
+        self._apply_activity_animation()
+        if changed and state.get("connected") and state.get("kind") in {"working", "attention"}:
+            self.ShowBotmuxStatus()
+
+    def _handle_rpa_event(self, event: dict) -> None:
+        if event.get("type") != "rpa.job":
+            if event.get("state") == "error":
+                self._show_bubble_text(f"影刀桥接启动失败：{event.get('message', '未知错误')}")
+            return
+        job = event.get("job")
+        if not isinstance(job, dict):
+            return
+        self._rpa_state = job
+        self._apply_activity_animation()
+        workflow = job.get("workflow") or "影刀工作流"
+        state = job.get("state")
+        if state in {"accepted", "running"}:
+            text = f"{workflow}正在执行，请暂时不要操作鼠标。"
+        elif state == "completed":
+            text = f"{workflow}已经完成。"
+        elif state in {"failed", "cancelled"}:
+            text = f"{workflow}执行未完成：{job.get('message') or state}"
+        else:
+            text = str(job.get("message") or workflow)
+        self._show_bubble_text(text)
+
+    def _activity_kind(self) -> str:
+        if isinstance(self._rpa_state, dict) and self._rpa_state.get("state") in {"accepted", "running"}:
+            return "working"
+        return str(self._botmux_state.get("kind") or "offline")
+
+    def _apply_activity_animation(self) -> None:
+        if self._character_key != "xier":
+            return
+        kind = self._activity_kind()
+        if kind == "working":
+            gif_name = "bss_write.gif"
+        elif kind == "attention":
+            gif_name = "bss_next.gif"
+        else:
+            gif_name = "bss.gif"
+        self.set_character_gif(
+            os.path.join(get_base_dir(), "image", gif_name),
+            update_identity=False,
+        )
+
+    def _botmux_status_text(self) -> str:
+        state = self._botmux_state
+        if not self._botmux_config.get("enabled"):
+            return "Botmux 尚未启用，请配置 botmux_config.json。"
+        if not state.get("connected"):
+            detail = state.get("error") or "服务未连接"
+            return f"Botmux 当前离线：{detail}"
+        active = int(state.get("active") or 0)
+        attention = int(state.get("attention") or 0)
+        session = state.get("session") if isinstance(state.get("session"), dict) else {}
+        bot_name = session.get("botName") or "机器人"
+        title = (
+            session.get("title")
+            or session.get("previewUserText")
+            or session.get("chatDisplayName")
+            or ""
+        )
+        if state.get("kind") == "attention":
+            attention_info = session.get("agentAttention")
+            reason = attention_info.get("reason") if isinstance(attention_info, dict) else ""
+            return f"{bot_name}需要你处理：{reason or title or '等待确认'}"
+        if state.get("kind") == "working":
+            return f"{bot_name}正在处理：{title or '当前任务'}"
+        if active:
+            latest = session.get("previewBotText")
+            if latest:
+                return f"{bot_name}刚刚回复：{latest}"
+            return f"{active} 个机器人会话在线，当前等待新任务。"
+        if attention:
+            return f"有 {attention} 个任务需要处理。"
+        return "Botmux 已连接，目前没有活跃任务。"
+
+    def _show_bubble_text(self, text: str) -> None:
+        if not text or not self.isVisible() or self.isMinimized():
+            return
+        self._bubble.set_text(str(text))
+        self._bubble.show_at(self._bubble_global_pos())
+        self._bubble_hide_timer.start(7000)
+
+    def ShowBotmuxStatus(self) -> None:
+        self._show_bubble_text(self._botmux_status_text())
+
+    def OpenBotmuxDashboard(self) -> None:
+        url = str(self._botmux_config.get("dashboard_url") or "").strip()
+        if not url or not open_external(url):
+            QMessageBox.warning(self, "Botmux", "无法打开 Botmux Dashboard。")
+
+    def OpenInput(self) -> None:
+        VoiceToText.request_input()
+
+    def shutdown(self) -> None:
+        VoiceToText.stop()
+        self._botmux_monitor.stop()
+        self._rpa_bridge.stop()
+        unsubscribe = getattr(self, "_unsubscribe_rpa_events", None)
+        if callable(unsubscribe):
+            unsubscribe()
+            self._unsubscribe_rpa_events = None
 
     def _warmup_bubble_hidden(self) -> None:
         """
@@ -328,9 +497,12 @@ class DesktopWife(QWidget):
             cleaned = ["{name}正在工作呢~"]
         return cleaned
 
-    def set_character_gif(self, gif_path: str) -> bool:
+    def set_character_gif(self, gif_path: str, update_identity: bool = True) -> bool:
         if not gif_path or not os.path.exists(gif_path):
             return False
+        normalized_path = os.path.abspath(gif_path)
+        if os.path.abspath(getattr(self, "_current_gif_path", "")) == normalized_path:
+            return True
         movie = QMovie(gif_path)
         if not movie.isValid():
             return False
@@ -349,10 +521,15 @@ class DesktopWife(QWidget):
         self.movie.frameChanged.connect(self.resize_movie)
         self.movie.start()
         self.resize_movie(0)
+        self._current_gif_path = normalized_path
 
         # Update character identity for bubble messages.
-        self._character_key = self._character_key_from_gif_path(gif_path)
-        self._character_name = self._character_display_name(self._character_key)
+        if update_identity:
+            self._base_gif_path = normalized_path
+            self._character_key = self._character_key_from_gif_path(gif_path)
+            self._character_name = self._character_display_name(self._character_key)
+            if hasattr(self, "_botmux_state"):
+                QTimer.singleShot(0, self._apply_activity_animation)
         return True
 
     def _position_message(self):
@@ -422,6 +599,15 @@ class DesktopWife(QWidget):
         self.startup = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"启动方式", self)
         self.Menu.addAction(self.startup)
 
+        self.open_input = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"唤醒输入", self)
+        self.Menu.addAction(self.open_input)
+
+        self.botmux_status = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"机器人状态", self)
+        self.Menu.addAction(self.botmux_status)
+
+        self.botmux_dashboard = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"打开 Botmux", self)
+        self.Menu.addAction(self.botmux_dashboard)
+
         self.StartTray = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"退置托盘", self)
         self.Menu.addAction(self.StartTray)
 
@@ -431,6 +617,9 @@ class DesktopWife(QWidget):
         self.out_voice.triggered.connect(self.WeatherForecast)
         self.custom_voice.triggered.connect(self.ProgramsConfig)
         self.change_role.triggered.connect(self.ChangeRole)
+        self.open_input.triggered.connect(self.OpenInput)
+        self.botmux_status.triggered.connect(self.ShowBotmuxStatus)
+        self.botmux_dashboard.triggered.connect(self.OpenBotmuxDashboard)
         self.StartTray.triggered.connect(self.SetTray)
         self.startup.triggered.connect(self.Startup)
         self.CloseWindowAction.triggered.connect(self.CloseWindowActionEvent)
@@ -461,8 +650,8 @@ class DesktopWife(QWidget):
         关闭界面并提出后台进程
         :return: None
         """
+        self.shutdown()
         self.close()
-        VoiceToText.CONTROLLER = False
         QApplication.instance().quit()
     def Startup(self) -> None:
         """
@@ -491,6 +680,13 @@ class DesktopWife(QWidget):
         if not self.isVisible() or self.isMinimized():
             return
         if getattr(self, "_bubble", None) is None:
+            return
+        if self._activity_kind() in {"working", "attention"}:
+            if isinstance(self._rpa_state, dict) and self._rpa_state.get("state") in {"accepted", "running"}:
+                workflow = self._rpa_state.get("workflow") or "影刀工作流"
+                self._show_bubble_text(f"{workflow}正在执行，请暂时不要操作鼠标。")
+            else:
+                self.ShowBotmuxStatus()
             return
         templates = getattr(self, "_bubble_templates", None) or ["{name}正在工作呢~"]
         tmpl = random.choice(templates)
@@ -558,6 +754,7 @@ class DesktopWife(QWidget):
 
     def closeEvent(self, event):
         # Ensure bubble window doesn't leak.
+        self.shutdown()
         self._pause_bubble()
         try:
             if getattr(self, "_bubble", None) is not None:
@@ -571,6 +768,7 @@ def main():
     _apply_material_theme(app)
     app.setQuitOnLastWindowClosed(False)
     Window = DesktopWife()
+    app.aboutToQuit.connect(Window.shutdown)
     # Aggressive warm-up before showing any UI (no visible flash).
     Window._warmup_bubble_hidden()
     Window.show()

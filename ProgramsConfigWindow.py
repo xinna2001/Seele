@@ -38,19 +38,19 @@ class ManageWakeWordsWindow(QWidget):
         "生成视频",
         "生成网页",
         "查询动漫",
-        "部署项目一",
+        "部署项目",
         "京东数据抓取",
         "点星",
     }
     _DEFAULT_FILE_KEYS = {
         "下载ppt",
-        "工资邮件",
+        "发个邮件",
         "执行代码",
         "调研ppt",
         "生成视频",
         "生成网页",
         "查询动漫",
-        "部署项目一",
+        "部署项目",
         "京东数据抓取",
         "点星",
     }
@@ -581,9 +581,10 @@ class main(QWidget):
             QMessageBox.warning(self, "警告", "uid和唤醒词需要同时填写。")
             return
         else:
-            uid_json = wf.read_dict_from_json("uid.json")
+            path = _json_path("uid.json")
+            uid_json = wf.read_dict_from_json(path) or {}
             uid_json[word] = uid
-            wf.write_dict_to_json(uid_json, "uid.json")
+            wf.write_dict_to_json(uid_json, path)
             QMessageBox.information(self, "提示", "自定义语音已设置成功！", QMessageBox.Yes)
             self.close()
 
@@ -724,9 +725,10 @@ class main2(QWidget):
             QMessageBox.warning(self, "警告", "文件名称和唤醒词需要同时填写。")
             return
         else:
-            uid_json = wf.read_dict_from_json("file_name.json")
+            path = _json_path("file_name.json")
+            uid_json = wf.read_dict_from_json(path) or {}
             uid_json[word] = uid
-            wf.write_dict_to_json(uid_json, "file_name.json")
+            wf.write_dict_to_json(uid_json, path)
             QMessageBox.information(self, "提示", "自定义语音已设置成功！", QMessageBox.Yes)
             self.close()
 

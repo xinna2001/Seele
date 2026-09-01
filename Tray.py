@@ -1,7 +1,7 @@
 """
 用于创建系统托盘
 """
-# import sys
+import os
 
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import QTimer
@@ -33,7 +33,7 @@ class TrayIcon(QSystemTrayIcon):
         self.setContextMenu(self.menu)
 
         # 设置图标
-        self.setIcon(QIcon(".\\image\\bs_icon.png"))
+        self.setIcon(QIcon(os.path.join(os.path.dirname(os.path.abspath(__file__)), "image", "bs_icon.png")))
         self.icon = self.MessageIcon()
 
         # 把鼠标点击图标的信号和槽连接
@@ -54,9 +54,11 @@ class TrayIcon(QSystemTrayIcon):
 
     def quit(self):
         self.setVisible(False)  # 托盘图标会自动消失
-        qApp.quit()
+        shutdown = getattr(self.ui, "shutdown", None)
+        if callable(shutdown):
+            shutdown()
         self.ui.close()
-        exit()
+        qApp.quit()
 
     def onIconClicked(self, reason):
         if reason == QSystemTrayIcon.DoubleClick:

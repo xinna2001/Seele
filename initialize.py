@@ -3,13 +3,11 @@ from threading import Thread
 import write_file as wf
 import webbrowser
 import play_vioce as pv
-import sys  # 新增导入shutil模块
+from platform_utils import app_path, get_tools_dir
 
 
 def get_tools_folder_path():
-    if os.path.isdir(r"D:\\"):
-        return r"D:\SeeleTools"
-    return r"C:\SeeleTools"
+    return str(get_tools_dir())
 
 
 def set_file(current_dir):
@@ -71,14 +69,15 @@ def open_url(url):
 def main(current_dir):
     pv.main("1.wav")
     set_file(current_dir)
-    dic=wf.read_dict_from_json('state.json')
+    state_path = app_path("state.json")
+    dic = wf.read_dict_from_json(state_path) or {}
     open_url("https://www.yingdao.com/product/")
     open_url("https://api.winrobot360.com/redirect/robot/share?inviteKey=050edc1539037e9f")
     open_url("https://blog.csdn.net/weixin_58478243/article/details/146606853?spm=1001.2014.3001.5502")
     pv.main("2.wav")
     pv.main("8.wav")
     dic["initialize"]="1"
-    wf.write_dict_to_json(dic,'state.json')
+    wf.write_dict_to_json(dic, state_path)
 
 
 # def run() -> None:
@@ -87,7 +86,8 @@ def main(current_dir):
 
 def run(current_exe_path: str) -> None:
     Start = Thread(target=main, args=(current_exe_path,))
+    Start.daemon = True
     Start.start()
 
 if __name__ == "__main__":
-    set_file()
+    set_file(str(app_path()))

@@ -18,13 +18,18 @@ def main(text):
         text="初始化"
     elif "创建" in text and "工作" in text:
         text="创建工作"
-    elif "部署" in text and "项目1" or "部署" in text and "项目一":
-        text="部署项目一"
-    elif "爬取" in text and "京东" or "抓取" in text and "京东":
+    elif ("部署" in text and "项目1" in text) or ("部署" in text and "项目一" in text):
+        text="部署项目"
+    elif ("爬取" in text and "京东" in text) or ("抓取" in text and "京东" in text):
         text="京东数据抓取"
     elif "生成" in text and "视频" in text:
         text="生成视频"
-    elif "做" in text and "网页" in text or "作" in text and "网页" or "做" in text and "网站" in text or "作" in text and "网站" in text:
+    elif (
+        ("做" in text and "网页" in text)
+        or ("作" in text and "网页" in text)
+        or ("做" in text and "网站" in text)
+        or ("作" in text and "网站" in text)
+    ):
         text="生成网页"
     elif "查" in text and "动漫" in text:
         text="查询动漫"
