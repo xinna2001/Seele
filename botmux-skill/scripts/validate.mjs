@@ -11,7 +11,7 @@ for (const relative of required) {
 }
 
 const skill = await readFile(new URL('../dist/skills/seele-rpa/SKILL.md', import.meta.url), 'utf8');
-if (!skill.startsWith('---\n') || !skill.includes('name: "seele-rpa"')) {
+if (!/^---\r?\n/.test(skill) || !skill.includes('name: "seele-rpa"')) {
   throw new Error('invalid Seele skill frontmatter');
 }
 
