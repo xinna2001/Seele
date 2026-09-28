@@ -247,8 +247,10 @@ jobs:
             run_exe.py
 
           plist="dist/Seele.app/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" "$plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $APP_VERSION" "$plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" "$plist" \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $APP_VERSION" "$plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $APP_VERSION" "$plist" \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $APP_VERSION" "$plist"
           codesign --force --deep --sign - "dist/Seele.app"
           codesign --verify --deep --strict --verbose=2 "dist/Seele.app"
           QT_QPA_PLATFORM=offscreen "dist/Seele.app/Contents/MacOS/Seele" --smoke-test
