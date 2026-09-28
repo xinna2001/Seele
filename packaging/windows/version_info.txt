@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 0, 0),
-    prodvers=(1, 0, 0, 0),
+    filevers=(2, 0, 0, 0),
+    prodvers=(2, 0, 0, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -16,12 +16,12 @@ VSVersionInfo(
         [
           StringStruct(u'CompanyName', u'Seele Project'),
           StringStruct(u'FileDescription', u'Seele Desktop Assistant'),
-          StringStruct(u'FileVersion', u'1.0.0'),
+          StringStruct(u'FileVersion', u'2.0.0'),
           StringStruct(u'InternalName', u'Seele'),
           StringStruct(u'LegalCopyright', u'MIT License'),
           StringStruct(u'OriginalFilename', u'Seele.exe'),
           StringStruct(u'ProductName', u'Seele'),
-          StringStruct(u'ProductVersion', u'1.0.0')
+          StringStruct(u'ProductVersion', u'2.0.0')
         ]
       )
     ]),

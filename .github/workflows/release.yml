@@ -67,8 +67,8 @@ jobs:
         run: |
           $versionTuple = (($env:APP_VERSION -split '\.') + '0') -join ', '
           $versionInfo = Get-Content "packaging/windows/version_info.txt" -Raw
-          $versionInfo = $versionInfo -replace '\(1, 0, 0, 0\)', "($versionTuple)"
-          $versionInfo = $versionInfo -replace "u'1.0.0'", "u'$env:APP_VERSION'"
+          $versionInfo = $versionInfo -replace '\(\d+,\s*\d+,\s*\d+,\s*0\)', "($versionTuple)"
+          $versionInfo = $versionInfo -replace "u'\d+\.\d+\.\d+'", "u'$env:APP_VERSION'"
           New-Item -ItemType Directory -Force -Path build | Out-Null
           $versionInfo | Set-Content -Encoding utf8 "build/windows-version-info.txt"
 
@@ -319,7 +319,7 @@ jobs:
           tag="v${VERSION}"
           notes="## Seele ${VERSION}
 
-          这是 Seele 的首个正式封装版本，保留桌面宠物、语音输入、影刀 RPA 与 Botmux 插件能力。
+          这是 Seele 的正式封装版本，保留桌面宠物、语音输入、影刀 RPA 与 Botmux 插件能力。
 
           ### 下载
 
