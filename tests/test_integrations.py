@@ -261,7 +261,8 @@ class MacByteBootstrapTests(unittest.TestCase):
                 script = mac_byte_bootstrap.launch_bootstrap(mode="setup", home=home)
 
             self.assertIsNotNone(script)
-            self.assertEqual(script.stat().st_mode & 0o777, 0o700)
+            if os.name != "nt":
+                self.assertEqual(script.stat().st_mode & 0o777, 0o700)
             self.assertIn("botmux setup", script.read_text(encoding="utf-8"))
             self.assertEqual(
                 run.call_args.args[0][:3],
