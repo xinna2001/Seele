@@ -9,6 +9,8 @@ from urllib.request import Request, urlopen
 
 import botmux_client
 import falseIntent
+import mac_byte_bootstrap
+import platform_utils
 import rpa_bridge
 import rpa_service
 
@@ -194,6 +196,100 @@ class IntentTests(unittest.TestCase):
 
     def test_deploy_intent_matches_fast_mode_catalog_name(self):
         self.assertEqual(falseIntent.main("帮我部署项目一"), "部署项目")
+
+
+class MacByteBootstrapTests(unittest.TestCase):
+    def test_release_edition_can_be_overridden(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "EDITION"
+            path.write_text("mac_byte\n", encoding="utf-8")
+            with patch.dict(os.environ, {}, clear=True):
+                self.assertEqual(mac_byte_bootstrap.current_edition(path), "mac_byte")
+            with patch.dict(os.environ, {"SEELE_EDITION": "mac"}, clear=True):
+                self.assertEqual(mac_byte_bootstrap.current_edition(path), "mac")
+
+    def test_bootstrap_mode_uses_botmux_install_and_config_state(self):
+        with patch.object(mac_byte_bootstrap, "botmux_is_installed", return_value=False):
+            self.assertEqual(mac_byte_bootstrap.bootstrap_mode(), "full")
+        with (
+            patch.object(mac_byte_bootstrap, "botmux_is_installed", return_value=True),
+            patch.object(mac_byte_bootstrap, "botmux_is_configured", return_value=False),
+        ):
+            self.assertEqual(mac_byte_bootstrap.bootstrap_mode(), "setup")
+        with (
+            patch.object(mac_byte_bootstrap, "botmux_is_installed", return_value=True),
+            patch.object(mac_byte_bootstrap, "botmux_is_configured", return_value=True),
+        ):
+            self.assertEqual(mac_byte_bootstrap.bootstrap_mode(), "ready")
+
+    def test_full_script_installs_latest_botmux_and_pauses_after_logins(self):
+        script = mac_byte_bootstrap.build_bootstrap_script(
+            "full",
+            script_path=Path("/tmp/bootstrap.command"),
+            lock_path=Path("/tmp/bootstrap.lock"),
+            status_path=Path("/tmp/bootstrap-status.json"),
+        )
+        self.assertIn(
+            "npm install -g botmux@latest --registry https://registry.npmjs.org/",
+            script,
+        )
+        self.assertIn("lark-cli auth login --recommend", script)
+        self.assertIn("agentbuddy login", script)
+        self.assertIn("botmux setup", script)
+        self.assertGreaterEqual(script.count("IFS= read -r _"), 5)
+        self.assertIn("[语音占位符]", script)
+
+    def test_botmux_configuration_requires_a_nonempty_catalog(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            config = home / ".botmux" / "bots.json"
+            config.parent.mkdir(parents=True)
+            config.write_text("[]", encoding="utf-8")
+            self.assertFalse(mac_byte_bootstrap.botmux_is_configured(home))
+            config.write_text('[{"larkAppId":"cli_test"}]', encoding="utf-8")
+            self.assertTrue(mac_byte_bootstrap.botmux_is_configured(home))
+
+    def test_launch_bootstrap_opens_a_private_fixed_script(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            with (
+                patch.object(mac_byte_bootstrap, "is_mac_byte", return_value=True),
+                patch.object(mac_byte_bootstrap.subprocess, "run") as run,
+            ):
+                run.return_value.returncode = 0
+                run.return_value.stderr = ""
+                script = mac_byte_bootstrap.launch_bootstrap(mode="setup", home=home)
+
+            self.assertIsNotNone(script)
+            self.assertEqual(script.stat().st_mode & 0o777, 0o700)
+            self.assertIn("botmux setup", script.read_text(encoding="utf-8"))
+            self.assertEqual(
+                run.call_args.args[0][:3],
+                ["/usr/bin/open", "-a", "Terminal"],
+            )
+            status = json.loads(
+                (home / ".seele" / "mac_byte" / "bootstrap-status.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(status["state"], "running")
+
+
+class PlatformPathTests(unittest.TestCase):
+    def test_frozen_macos_bundle_finds_contents_resources(self):
+        with tempfile.TemporaryDirectory() as directory:
+            contents = Path(directory) / "Seele.app" / "Contents"
+            executable = contents / "MacOS" / "Seele"
+            resources = contents / "Resources"
+            executable.parent.mkdir(parents=True)
+            resources.mkdir(parents=True)
+            (resources / "state.json").write_text("{}", encoding="utf-8")
+            with (
+                patch.object(platform_utils.sys, "frozen", True, create=True),
+                patch.object(platform_utils.sys, "_MEIPASS", str(contents / "Frameworks"), create=True),
+                patch.object(platform_utils.sys, "executable", str(executable)),
+            ):
+                self.assertEqual(platform_utils.get_base_dir(), resources.resolve())
 
 
 if __name__ == "__main__":

@@ -62,14 +62,23 @@ jobs:
 
       - name: Build portable application
         shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
         run: |
+          $versionTuple = (($env:APP_VERSION -split '\.') + '0') -join ', '
+          $versionInfo = Get-Content "packaging/windows/version_info.txt" -Raw
+          $versionInfo = $versionInfo -replace '\(1, 0, 0, 0\)', "($versionTuple)"
+          $versionInfo = $versionInfo -replace "u'1.0.0'", "u'$env:APP_VERSION'"
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          $versionInfo | Set-Content -Encoding utf8 "build/windows-version-info.txt"
+
           python -m PyInstaller `
             --noconfirm `
             --clean `
             --windowed `
             --name Seele `
             --icon exe.ico `
-            --version-file packaging/windows/version_info.txt `
+            --version-file build/windows-version-info.txt `
             --contents-directory . `
             --collect-all qt_material `
             --add-data "audio;audio" `
@@ -84,11 +93,17 @@ jobs:
             --add-data "uid.json;." `
             --add-data "README.md;." `
             --add-data "CHANGELOG.md;." `
+            --add-data "EDITION;." `
             --add-data "VERSION;." `
             --add-data "LICENSE;." `
             run_exe.py
           if (-not (Test-Path "dist/Seele/Seele.exe")) {
             throw "PyInstaller did not produce dist/Seele/Seele.exe"
+          }
+          $env:QT_QPA_PLATFORM = "offscreen"
+          & "dist/Seele/Seele.exe" --smoke-test
+          if ($LASTEXITCODE -ne 0) {
+            throw "Packaged Windows application smoke test failed."
           }
 
       - name: Build installer and checksums
@@ -118,15 +133,15 @@ jobs:
             platform = "windows-x64"
             built_at = (Get-Date).ToUniversalTime().ToString("o")
           } | ConvertTo-Json
-          $manifest | Set-Content -Encoding utf8 "release/release-manifest.json"
+          $manifest | Set-Content -Encoding utf8 "release/release-manifest-windows.json"
 
           Get-ChildItem release -File |
-            Where-Object { $_.Name -ne "SHA256SUMS.txt" } |
+            Where-Object { $_.Name -ne "SHA256SUMS-windows.txt" } |
             Sort-Object Name |
             ForEach-Object {
               $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
               "$hash  $($_.Name)"
-            } | Set-Content -Encoding ascii "release/SHA256SUMS.txt"
+            } | Set-Content -Encoding ascii "release/SHA256SUMS-windows.txt"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -134,14 +149,166 @@ jobs:
           path: release/*
           if-no-files-found: error
 
+  package-mac-byte:
+    name: Package mac_byte arm64
+    runs-on: macos-14
+    environment:
+      name: mac-byte-packaging
+      url: ${{ github.server_url }}/${{ github.repository }}/releases
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: version
+        name: Resolve version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="${{ inputs.version }}"
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version must use MAJOR.MINOR.PATCH format." >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run Python tests
+        run: python -m unittest discover -s tests -v
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Validate Botmux plugin
+        working-directory: botmux-skill
+        run: npm test
+
+      - name: Build macOS icon
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/Seele.iconset
+          cp image/bs_icon.png build/icon-source.png
+          sips --cropToHeightWidth 452 452 build/icon-source.png --out build/icon-square.png >/dev/null
+          sips -z 16 16 build/icon-square.png --out build/Seele.iconset/icon_16x16.png >/dev/null
+          sips -z 32 32 build/icon-square.png --out build/Seele.iconset/icon_16x16@2x.png >/dev/null
+          sips -z 32 32 build/icon-square.png --out build/Seele.iconset/icon_32x32.png >/dev/null
+          sips -z 64 64 build/icon-square.png --out build/Seele.iconset/icon_32x32@2x.png >/dev/null
+          sips -z 128 128 build/icon-square.png --out build/Seele.iconset/icon_128x128.png >/dev/null
+          sips -z 256 256 build/icon-square.png --out build/Seele.iconset/icon_128x128@2x.png >/dev/null
+          sips -z 256 256 build/icon-square.png --out build/Seele.iconset/icon_256x256.png >/dev/null
+          sips -z 512 512 build/icon-square.png --out build/Seele.iconset/icon_256x256@2x.png >/dev/null
+          sips -z 512 512 build/icon-square.png --out build/Seele.iconset/icon_512x512.png >/dev/null
+          sips -z 1024 1024 build/icon-square.png --out build/Seele.iconset/icon_512x512@2x.png >/dev/null
+          iconutil -c icns build/Seele.iconset -o build/Seele.icns
+
+      - name: Build and smoke-test mac_byte app
+        shell: bash
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          python -m PyInstaller \
+            --noconfirm \
+            --clean \
+            --windowed \
+            --name Seele \
+            --icon build/Seele.icns \
+            --osx-bundle-identifier com.xinna2001.seele.mac-byte \
+            --contents-directory . \
+            --collect-all qt_material \
+            --add-data "audio:audio" \
+            --add-data "image:image" \
+            --add-data "botmux-skill:botmux-skill" \
+            --add-data "audio_name_dic.json:." \
+            --add-data "botmux_config.example.json:." \
+            --add-data "bubble_texts.json:." \
+            --add-data "config.json:." \
+            --add-data "file_name.json:." \
+            --add-data "state.json:." \
+            --add-data "uid.json:." \
+            --add-data "README.md:." \
+            --add-data "CHANGELOG.md:." \
+            --add-data "EDITION:." \
+            --add-data "VERSION:." \
+            --add-data "LICENSE:." \
+            run_exe.py
+
+          plist="dist/Seele.app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" "$plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $APP_VERSION" "$plist"
+          codesign --force --deep --sign - "dist/Seele.app"
+          codesign --verify --deep --strict --verbose=2 "dist/Seele.app"
+          QT_QPA_PLATFORM=offscreen "dist/Seele.app/Contents/MacOS/Seele" --smoke-test
+
+      - name: Build mac_byte DMG, ZIP, and checksums
+        shell: bash
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          zip_path="release/Seele-${APP_VERSION}-mac_byte-macos-arm64.zip"
+          dmg_path="release/Seele-${APP_VERSION}-mac_byte-macos-arm64.dmg"
+          ditto -c -k --sequesterRsrc --keepParent "dist/Seele.app" "$zip_path"
+          hdiutil create \
+            -volname "Seele ${APP_VERSION} mac_byte" \
+            -srcfolder "dist/Seele.app" \
+            -ov \
+            -format UDZO \
+            "$dmg_path"
+
+          cat > release/release-manifest-mac_byte.json <<EOF
+          {
+            "product": "Seele",
+            "version": "${APP_VERSION}",
+            "edition": "mac_byte",
+            "commit": "${GITHUB_SHA}",
+            "platform": "macos-arm64",
+            "signed": "ad-hoc",
+            "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+          (
+            cd release
+            shasum -a 256 \
+              "Seele-${APP_VERSION}-mac_byte-macos-arm64.zip" \
+              "Seele-${APP_VERSION}-mac_byte-macos-arm64.dmg" \
+              release-manifest-mac_byte.json \
+              > SHA256SUMS-mac_byte.txt
+          )
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Seele-${{ steps.version.outputs.version }}-mac_byte
+          path: release/*
+          if-no-files-found: error
+
   release:
     name: Publish GitHub Release
-    needs: package-windows
+    needs: [package-windows, package-mac-byte]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: Seele-${{ needs.package-windows.outputs.version }}-windows
+          path: release
+      - uses: actions/download-artifact@v4
+        with:
+          name: Seele-${{ needs.package-mac-byte.outputs.version }}-mac_byte
           path: release
 
       - name: Create or update release
@@ -158,11 +325,13 @@ jobs:
 
           - \`Seele-${VERSION}-windows-x64-setup.exe\`：Windows 安装版
           - \`Seele-${VERSION}-windows-x64-portable.zip\`：Windows 便携版
-          - \`SHA256SUMS.txt\`：文件完整性校验
+          - \`Seele-${VERSION}-mac_byte-macos-arm64.dmg\`：字节内部 Apple Silicon 安装版
+          - \`Seele-${VERSION}-mac_byte-macos-arm64.zip\`：字节内部 Apple Silicon 压缩包
+          - \`SHA256SUMS-*.txt\`：文件完整性校验
 
           ### 说明
 
-          当前 Windows 安装包尚未配置商业代码签名证书，首次运行时 Windows 可能显示 SmartScreen 提示。"
+          当前 Windows 安装包尚未配置商业代码签名证书，首次运行时 Windows 可能显示 SmartScreen 提示。mac_byte 包使用 ad-hoc 签名，仅面向字节内部测试。"
 
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" release/* --clobber --repo "$GITHUB_REPOSITORY"

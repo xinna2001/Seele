@@ -1,6 +1,4 @@
-PyAutoGUI>=0.9.54,<1
 PyQt5>=5.15.9,<5.16
-keyboard>=0.13.5,<1
 pynput>=1.7,<2
 pyinstaller>=6.11,<7
 qt-material>=2.14,<3
@@ -8,4 +6,6 @@ sounddevice>=0.5,<1
 soundfile>=0.13,<1
 
 # Windows-only helpers used by packaging and native integrations.
+PyAutoGUI>=0.9.54,<1; sys_platform == "win32"
+keyboard>=0.13.5,<1; sys_platform == "win32"
 pywin32>=306; sys_platform == "win32"

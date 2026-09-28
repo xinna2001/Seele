@@ -30,8 +30,28 @@ def _run_splash(ready_file):
     import play_stare
     play_stare.main(ready_file=ready_file, timeout_seconds=600)
 
+
+def _run_smoke_test():
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    os.environ["SEELE_EDITION"] = "packaging-smoke"
+    from PyQt5.QtWidgets import QApplication
+    import Seele
+
+    app = QApplication.instance() or QApplication([])
+    window = Seele.DesktopWife()
+    window.show()
+    app.processEvents()
+    valid = bool(window.movie.isValid() and window.width() > 0 and window.height() > 0)
+    window.shutdown()
+    window.close()
+    app.processEvents()
+    return 0 if valid else 1
+
+
 def main():
     argv = sys.argv[1:]
+    if argv == ["--smoke-test"]:
+        return _run_smoke_test()
     if len(argv) >= 2 and argv[0] == "--splash":
         _run_splash(argv[1])
         return 0

@@ -56,6 +56,19 @@ python Seele.py
 
 Linux 还需由系统包管理器安装 Qt/XCB、PortAudio 和 Tk。Wayland、macOS 和部分 Linux 桌面可能不允许 `keyboard` 注册全局热键，此时可在桌面宠物右键菜单选择“唤醒输入”。
 
+## mac_byte 版本
+
+仓库根目录的 [`EDITION`](EDITION) 为 `mac_byte` 时，Seele 会在 macOS 首次启动时检查 `botmux`：
+
+- 未安装 Botmux：自动打开 Terminal，按固定顺序安装 Node.js、Trae CLI、Lark CLI、AgentBuddy 和 `botmux@latest`；
+- 已安装但没有机器人配置：直接打开 `botmux setup`；
+- 已安装且已配置：不重复打开安装流程；
+- 安装脚本要求字节内网；Botmux 固定从 npm 官方源获取 `latest`，不锁定具体版本；
+- Trae、Lark CLI、AgentBuddy 和 Botmux 登录均在 Terminal 中完成，链接和二维码不会被桌面窗口遮挡；
+- 每个登录阶段结束后都会等待用户按回车，再进入下一阶段。
+
+登录语音文件暂以固定文件名预留，详见 [`audio/mac_byte/README.md`](audio/mac_byte/README.md)。文件不存在时只显示占位提示，不影响安装。
+
 ## Botmux 配置
 
 复制 `botmux_config.example.json` 为 `botmux_config.json`：

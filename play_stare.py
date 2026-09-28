@@ -1,63 +1,58 @@
 import os
 import sys
 import time
-import tkinter as tk
-from tkinter import ttk
+from platform_utils import get_base_dir as _platform_base_dir
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QPainter, QPixmap
+from PyQt5.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
 
 def get_base_dir():
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+    return str(_platform_base_dir())
 
-class MainApp:
-    def __init__(self, root, ready_file=None, timeout_seconds=300):
-        self.root = root
+
+
+class MainApp(QWidget):
+    def __init__(self, ready_file=None, timeout_seconds=300):
+        super().__init__()
         self.ready_file = ready_file
         self.deadline = time.time() + max(1, int(timeout_seconds))
-        self.root.title("Seele等待界面")
-
-        # 设置窗口大小
-        self.root.geometry("800x500")
-        self.root.configure(bg="white")  # 默认背景颜色为白色
-
-        # 加载背景图片
-        try:
-            self.bg_image = tk.PhotoImage(file=os.path.join(get_base_dir(), "image", "image.png"))
-        except Exception as e:
-            print(f"加载背景图片失败: {e}")
-            self.bg_image = None
-
-        # 创建主布局
-        self.create_ui()
-
-        # 控制窗口关闭的标志（改为类内属性）
+        self.setWindowTitle("Seele等待界面")
+        self.setFixedSize(800, 500)
+        self._background = QPixmap(os.path.join(get_base_dir(), "image", "image.png"))
         self.close_flag = False
+        self.create_ui()
+        self._timer = QTimer(self)
+        self._timer.setInterval(100)
+        self._timer.timeout.connect(self.check_close_condition)
+        self._timer.start()
 
     def create_ui(self):
-        # 添加背景图片到 Label
-        if self.bg_image:
-            bg_label = tk.Label(self.root, image=self.bg_image)
-            bg_label.place(x=0, y=0, relwidth=1, relheight=1)  # 背景图片铺满整个窗口
-
-        # 添加提示文字
-        label = tk.Label(
-            self.root,
-            text="请稍等，希儿马上就好~",
-            font=("Arial", 18, "bold"),
-            bg="white",  # 如果没有背景图片，则使用白色背景
-            fg="black"
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.addStretch(1)
+        label = QLabel("请稍等，希儿马上就好~", self)
+        label.setAlignment(Qt.AlignCenter)
+        label.setStyleSheet(
+            "QLabel {"
+            " background: rgba(255, 255, 255, 220);"
+            " color: #111;"
+            " border-radius: 8px;"
+            " padding: 12px 18px;"
+            " font-size: 24px;"
+            " font-weight: 600;"
+            "}"
         )
-        label.pack(pady=20)
+        layout.addWidget(label, 0, Qt.AlignHCenter)
+        layout.addStretch(4)
 
     def hide_window(self):
-        """隐藏窗口并显示提示消息"""
-        self.root.withdraw()  # 隐藏窗口
-        self.root.quit()  # 退出程序
+        self._timer.stop()
+        self.close()
+        app = QApplication.instance()
+        if app:
+            app.quit()
 
     def check_close_condition(self):
-        """
-        定期检查关闭条件是否满足
-        """
         if self.close_flag:
             self.hide_window()
             return
@@ -68,22 +63,31 @@ class MainApp:
 
         if time.time() >= self.deadline:
             self.hide_window()
-            return
-
-        self.root.after(100, self.check_close_condition)
 
     def set_close_flag(self, flag: bool):
-        """
-        设置关闭标志
-        :param flag: 是否关闭窗口的标志 (True/False)
-        """
         self.close_flag = flag
 
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        if self._background.isNull():
+            painter.fillRect(self.rect(), Qt.white)
+            return
+        scaled = self._background.scaled(
+            self.size(),
+            Qt.KeepAspectRatioByExpanding,
+            Qt.SmoothTransformation,
+        )
+        x = int((self.width() - scaled.width()) / 2)
+        y = int((self.height() - scaled.height()) / 2)
+        painter.drawPixmap(x, y, scaled)
+
+
 def main(ready_file=None, timeout_seconds=300):
-    root = tk.Tk()
-    app = MainApp(root, ready_file=ready_file, timeout_seconds=timeout_seconds)
-    app.check_close_condition()
-    root.mainloop()
+    app = QApplication.instance() or QApplication(sys.argv)
+    window = MainApp(ready_file=ready_file, timeout_seconds=timeout_seconds)
+    window.show()
+    app.exec_()
 
 if __name__ == "__main__":
     ready = None

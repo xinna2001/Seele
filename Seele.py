@@ -1,6 +1,7 @@
 import sys
 import os
 import random
+import threading
 
 # qt-material/qtpy picks the Qt binding at import time.
 # Set this as early as possible to ensure PyQt5 is selected.
@@ -15,9 +16,10 @@ import write_file as wf
 import ProgramsConfigWindow
 import RoleSwitchWindow
 import botmux_client
+import mac_byte_bootstrap
 import rpa_bridge
 import rpa_service
-from platform_utils import open_external
+from platform_utils import get_base_dir as _platform_base_dir, open_external
 from PyQt5.QtCore import Qt, QSize, QPoint, QObject, pyqtSignal
 from PyQt5.QtGui import QIcon, QFontMetrics
 from PyQt5.QtCore import QRectF
@@ -38,6 +40,7 @@ from PyQt5.QtWidgets import QMessageBox, QApplication
 class _IntegrationSignals(QObject):
     botmux_state = pyqtSignal(dict)
     rpa_event = pyqtSignal(dict)
+    bootstrap_event = pyqtSignal(dict)
 
 def _apply_material_theme(app: QApplication) -> None:
     """
@@ -82,15 +85,13 @@ def _apply_material_theme(app: QApplication) -> None:
         return
 
 def get_base_dir():
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+    return str(_platform_base_dir())
 
 def _json_path(name):
     return os.path.join(get_base_dir(), name)
 
 dic = wf.read_dict_from_json(_json_path('state.json')) or {}
-if dic.get("initialize", "0") == "0":
+if not mac_byte_bootstrap.is_mac_byte() and dic.get("initialize", "0") == "0":
     initialize.run(get_base_dir())
 
 class _SpeechBubble(QWidget):
@@ -275,6 +276,7 @@ class DesktopWife(QWidget):
         self._integration_signals = _IntegrationSignals(self)
         self._integration_signals.botmux_state.connect(self._handle_botmux_state)
         self._integration_signals.rpa_event.connect(self._handle_rpa_event)
+        self._integration_signals.bootstrap_event.connect(self._handle_bootstrap_event)
         self._unsubscribe_rpa_events = rpa_service.subscribe_job_events(
             self._integration_signals.rpa_event.emit,
         )
@@ -286,7 +288,9 @@ class DesktopWife(QWidget):
             self._botmux_config.get("bridge") or {},
             self._integration_signals.rpa_event.emit,
         )
+        self._bootstrap_thread = None
         QTimer.singleShot(0, self._start_integrations)
+        QTimer.singleShot(1200, self.StartMacByteBootstrap)
 
     def _start_integrations(self) -> None:
         self._botmux_monitor.start()
@@ -406,6 +410,50 @@ class DesktopWife(QWidget):
         url = str(self._botmux_config.get("dashboard_url") or "").strip()
         if not url or not open_external(url):
             QMessageBox.warning(self, "Botmux", "无法打开 Botmux Dashboard。")
+
+    def StartMacByteBootstrap(self) -> None:
+        if not mac_byte_bootstrap.is_mac_byte():
+            return
+        if self._bootstrap_thread and self._bootstrap_thread.is_alive():
+            self._show_bubble_text("Botmux 安装终端已经打开。")
+            return
+        self._bootstrap_thread = threading.Thread(
+            target=self._run_mac_byte_bootstrap,
+            name="seele-mac-byte-bootstrap",
+            daemon=True,
+        )
+        self._bootstrap_thread.start()
+
+    def _run_mac_byte_bootstrap(self) -> None:
+        try:
+            mode = mac_byte_bootstrap.bootstrap_mode()
+            script = mac_byte_bootstrap.launch_bootstrap(mode=mode)
+            if script is None:
+                state = "ready" if mode == "ready" else "running"
+                self._integration_signals.bootstrap_event.emit({"state": state})
+                return
+            self._integration_signals.bootstrap_event.emit({
+                "state": "launched",
+                "mode": mode,
+            })
+        except (OSError, RuntimeError, ValueError) as exc:
+            self._integration_signals.bootstrap_event.emit({
+                "state": "error",
+                "message": str(exc),
+            })
+
+    def _handle_bootstrap_event(self, event: dict) -> None:
+        state = event.get("state")
+        if state == "launched":
+            if event.get("mode") == "full":
+                text = "未检测到 Botmux，已打开安装终端。登录时请按终端提示操作。"
+            else:
+                text = "Botmux 尚未配置，已打开扫码配置终端。"
+            self._show_bubble_text(text)
+        elif state == "running":
+            self._show_bubble_text("Botmux 安装终端已经打开。")
+        elif state == "error":
+            self._show_bubble_text(f"Botmux 安装启动失败：{event.get('message') or '未知错误'}")
 
     def OpenInput(self) -> None:
         VoiceToText.request_input()
@@ -602,6 +650,15 @@ class DesktopWife(QWidget):
         self.open_input = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"唤醒输入", self)
         self.Menu.addAction(self.open_input)
 
+        self.botmux_installer = None
+        if mac_byte_bootstrap.is_mac_byte():
+            self.botmux_installer = QAction(
+                QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")),
+                u"安装或配置 Botmux",
+                self,
+            )
+            self.Menu.addAction(self.botmux_installer)
+
         self.botmux_status = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"机器人状态", self)
         self.Menu.addAction(self.botmux_status)
 
@@ -618,6 +675,8 @@ class DesktopWife(QWidget):
         self.custom_voice.triggered.connect(self.ProgramsConfig)
         self.change_role.triggered.connect(self.ChangeRole)
         self.open_input.triggered.connect(self.OpenInput)
+        if self.botmux_installer is not None:
+            self.botmux_installer.triggered.connect(self.StartMacByteBootstrap)
         self.botmux_status.triggered.connect(self.ShowBotmuxStatus)
         self.botmux_dashboard.triggered.connect(self.OpenBotmuxDashboard)
         self.StartTray.triggered.connect(self.SetTray)

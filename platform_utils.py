@@ -11,9 +11,21 @@ from typing import Iterable
 
 
 def get_base_dir() -> Path:
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parent
+    source_dir = Path(__file__).resolve().parent
+    if not getattr(sys, "frozen", False):
+        return source_dir
+
+    executable_dir = Path(sys.executable).resolve().parent
+    candidates = [
+        Path(getattr(sys, "_MEIPASS", executable_dir)),
+        executable_dir,
+        executable_dir.parent / "Resources",
+        source_dir,
+    ]
+    for candidate in candidates:
+        if (candidate / "state.json").is_file():
+            return candidate
+    return candidates[0]
 
 
 def app_path(*parts: str) -> Path:

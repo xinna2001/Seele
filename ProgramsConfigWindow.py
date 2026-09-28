@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import write_file as wf
+from platform_utils import get_base_dir as _platform_base_dir
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtWidgets import QPushButton
 from PyQt5.QtWidgets import QLabel
@@ -13,9 +14,7 @@ from PyQt5.QtWidgets import QFrame, QScrollArea, QSizePolicy
 
 
 def get_base_dir():
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+    return str(_platform_base_dir())
 
 def _json_path(name: str) -> str:
     return os.path.join(get_base_dir(), name)

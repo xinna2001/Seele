@@ -1,15 +1,14 @@
 import sys
 import os
 import write_file
+from platform_utils import get_base_dir as _platform_base_dir
 from PyQt5.QtCore import Qt, QRectF
 from PyQt5.QtGui import QIcon, QPixmap, QPainter, QPainterPath
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QMessageBox, QLabel, QFrame
 
 
 def get_base_dir():
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+    return str(_platform_base_dir())
 
 
 class main(QWidget):
