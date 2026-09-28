@@ -32,6 +32,17 @@ Seele 现在由三层组成：
 
 Botmux 扩展位于 [`botmux-skill/`](botmux-skill/)，不需要修改 Botmux 的 daemon、worker 或 CLI adapter。
 
+## 版本与安装包
+
+当前正式版本记录在 [`VERSION`](VERSION) 中。GitHub Release 提供：
+
+- `Seele-<version>-windows-x64-setup.exe`：Windows 安装版；
+- `Seele-<version>-windows-x64-portable.zip`：Windows 便携版；
+- `SHA256SUMS.txt`：发布文件的 SHA-256 校验值；
+- `release-manifest.json`：版本、提交和构建时间。
+
+推送 `v*` Tag 或手动运行 `Package and release` GitHub Actions 工作流会执行测试、打包并发布 Release。打包任务使用 `windows-packaging` Environment，因此可以在仓库侧边栏的 Deployments 中查看发布记录。
+
 ## 安装
 
 推荐使用 Conda 和 Python 3.11：

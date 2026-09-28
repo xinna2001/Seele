@@ -1,0 +1,175 @@
+name: Package and release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version without the v prefix"
+        required: true
+        default: "1.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  package-windows:
+    name: Package Windows x64
+    runs-on: windows-latest
+    environment:
+      name: windows-packaging
+      url: ${{ github.server_url }}/${{ github.repository }}/releases
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: version
+        name: Resolve version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like "refs/tags/v*") {
+            $version = $env:GITHUB_REF_NAME.Substring(1)
+          } else {
+            $version = "${{ inputs.version }}"
+          }
+          if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') {
+            throw "Version must use MAJOR.MINOR.PATCH format."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run Python tests
+        run: python -m unittest discover -s tests -v
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Validate Botmux plugin
+        working-directory: botmux-skill
+        run: npm test
+
+      - name: Build portable application
+        shell: pwsh
+        run: |
+          python -m PyInstaller `
+            --noconfirm `
+            --clean `
+            --windowed `
+            --name Seele `
+            --icon exe.ico `
+            --version-file packaging/windows/version_info.txt `
+            --contents-directory . `
+            --collect-all qt_material `
+            --add-data "audio;audio" `
+            --add-data "image;image" `
+            --add-data "botmux-skill;botmux-skill" `
+            --add-data "audio_name_dic.json;." `
+            --add-data "botmux_config.example.json;." `
+            --add-data "bubble_texts.json;." `
+            --add-data "config.json;." `
+            --add-data "file_name.json;." `
+            --add-data "state.json;." `
+            --add-data "uid.json;." `
+            --add-data "README.md;." `
+            --add-data "CHANGELOG.md;." `
+            --add-data "VERSION;." `
+            --add-data "LICENSE;." `
+            run_exe.py
+          if (-not (Test-Path "dist/Seele/Seele.exe")) {
+            throw "PyInstaller did not produce dist/Seele/Seele.exe"
+          }
+
+      - name: Build installer and checksums
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          Compress-Archive `
+            -Path "dist/Seele" `
+            -DestinationPath "release/Seele-$env:APP_VERSION-windows-x64-portable.zip" `
+            -CompressionLevel Optimal
+
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            throw "Inno Setup compiler was not found."
+          }
+          & $iscc "/DMyAppVersion=$env:APP_VERSION" "packaging\windows\Seele.iss"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Inno Setup failed with exit code $LASTEXITCODE"
+          }
+
+          $manifest = @{
+            product = "Seele"
+            version = $env:APP_VERSION
+            commit = $env:GITHUB_SHA
+            platform = "windows-x64"
+            built_at = (Get-Date).ToUniversalTime().ToString("o")
+          } | ConvertTo-Json
+          $manifest | Set-Content -Encoding utf8 "release/release-manifest.json"
+
+          Get-ChildItem release -File |
+            Where-Object { $_.Name -ne "SHA256SUMS.txt" } |
+            Sort-Object Name |
+            ForEach-Object {
+              $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+              "$hash  $($_.Name)"
+            } | Set-Content -Encoding ascii "release/SHA256SUMS.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Seele-${{ steps.version.outputs.version }}-windows
+          path: release/*
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: package-windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Seele-${{ needs.package-windows.outputs.version }}-windows
+          path: release
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.package-windows.outputs.version }}
+        run: |
+          tag="v${VERSION}"
+          notes="## Seele ${VERSION}
+
+          这是 Seele 的首个正式封装版本，保留桌面宠物、语音输入、影刀 RPA 与 Botmux 插件能力。
+
+          ### 下载
+
+          - \`Seele-${VERSION}-windows-x64-setup.exe\`：Windows 安装版
+          - \`Seele-${VERSION}-windows-x64-portable.zip\`：Windows 便携版
+          - \`SHA256SUMS.txt\`：文件完整性校验
+
+          ### 说明
+
+          当前 Windows 安装包尚未配置商业代码签名证书，首次运行时 Windows 可能显示 SmartScreen 提示。"
+
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" release/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$tag" release/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Seele ${VERSION}" \
+              --notes "$notes"
+          fi
