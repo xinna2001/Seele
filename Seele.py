@@ -650,15 +650,6 @@ class DesktopWife(QWidget):
         self.open_input = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"唤醒输入", self)
         self.Menu.addAction(self.open_input)
 
-        self.botmux_installer = None
-        if mac_byte_bootstrap.is_mac_byte():
-            self.botmux_installer = QAction(
-                QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")),
-                u"安装或配置 Botmux",
-                self,
-            )
-            self.Menu.addAction(self.botmux_installer)
-
         self.botmux_status = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"机器人状态", self)
         self.Menu.addAction(self.botmux_status)
 
@@ -675,8 +666,6 @@ class DesktopWife(QWidget):
         self.custom_voice.triggered.connect(self.ProgramsConfig)
         self.change_role.triggered.connect(self.ChangeRole)
         self.open_input.triggered.connect(self.OpenInput)
-        if self.botmux_installer is not None:
-            self.botmux_installer.triggered.connect(self.StartMacByteBootstrap)
         self.botmux_status.triggered.connect(self.ShowBotmuxStatus)
         self.botmux_dashboard.triggered.connect(self.OpenBotmuxDashboard)
         self.StartTray.triggered.connect(self.SetTray)

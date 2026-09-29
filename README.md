@@ -69,7 +69,7 @@ Linux 还需由系统包管理器安装 Qt/XCB、PortAudio 和 Tk。Wayland、ma
 - Trae、Lark CLI、AgentBuddy 和 Botmux 登录均在 Terminal 中完成，链接和二维码不会被桌面窗口遮挡；
 - 每个登录阶段结束后都会等待用户按回车，再进入下一阶段。
 
-登录语音文件暂以固定文件名预留，详见 [`audio/mac_byte/README.md`](audio/mac_byte/README.md)。文件不存在时只显示占位提示，不影响安装。
+登录语音使用固定的 16 kHz WAV 文件，详见 [`audio/mac_byte/README.md`](audio/mac_byte/README.md)。文件不存在或播放失败时会回退为终端文字提示，不影响安装。
 
 ## Botmux 配置
 
