@@ -20,13 +20,13 @@ BYTE_NPM_REGISTRY = "https://bnpm.byted.org/"
 PUBLIC_NPM_REGISTRY = "https://registry.npmjs.org/"
 LOCK_TTL_SECONDS = 6 * 60 * 60
 
-VOICE_PLACEHOLDERS = {
-    "install": "mac_byte_install.wav",
-    "traex_login": "mac_byte_traex_login.wav",
-    "lark_config": "mac_byte_lark_config.wav",
-    "lark_login": "mac_byte_lark_login.wav",
-    "agentbuddy_login": "mac_byte_agentbuddy_login.wav",
-    "botmux_setup": "mac_byte_botmux_setup.wav",
+VOICE_FILES = {
+    "install": "mac_byte_install_16k.wav",
+    "traex_login": "mac_byte_traex_login_16k.wav",
+    "lark_config": "mac_byte_lark_config_16k.wav",
+    "lark_login": "mac_byte_lark_login_16k.wav",
+    "agentbuddy_login": "mac_byte_agentbuddy_login_16k.wav",
+    "botmux_setup": "mac_byte_botmux_setup_16k.wav",
 }
 
 
@@ -101,7 +101,7 @@ def bootstrap_mode(home: str | os.PathLike | None = None) -> str:
 
 
 def _voice_path(name: str) -> Path:
-    return app_path("audio", "mac_byte", VOICE_PLACEHOLDERS[name])
+    return app_path("audio", "mac_byte", VOICE_FILES[name])
 
 
 def _shell_voice(name: str, fallback_text: str) -> str:

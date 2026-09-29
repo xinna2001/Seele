@@ -199,6 +199,11 @@ class IntentTests(unittest.TestCase):
 
 
 class MacByteBootstrapTests(unittest.TestCase):
+    def test_all_mac_byte_voice_files_exist(self):
+        for voice_name, filename in mac_byte_bootstrap.VOICE_FILES.items():
+            with self.subTest(voice_name=voice_name, filename=filename):
+                self.assertTrue(mac_byte_bootstrap._voice_path(voice_name).is_file())
+
     def test_release_edition_can_be_overridden(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "EDITION"
