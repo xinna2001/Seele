@@ -6,6 +6,10 @@ import threading
 # qt-material/qtpy picks the Qt binding at import time.
 # Set this as early as possible to ensure PyQt5 is selected.
 os.environ.setdefault("QT_API", "pyqt5")
+if sys.platform == "darwin":
+    os.environ.setdefault("QT_ENABLE_HIGHDPI_SCALING", "1")
+    os.environ.setdefault("QT_AUTO_SCREEN_SCALE_FACTOR", "1")
+    os.environ.setdefault("QT_SCALE_FACTOR_ROUNDING_POLICY", "PassThrough")
 
 import Tray
 import OutVoice
@@ -35,6 +39,18 @@ from PyQt5.QtGui import QPainterPath
 from PyQt5.QtGui import QIcon, QMovie
 from PyQt5.QtWidgets import QDesktopWidget
 from PyQt5.QtWidgets import QMessageBox, QApplication
+
+
+def _configure_high_dpi() -> None:
+    if QApplication.instance() is not None:
+        return
+    if hasattr(Qt, "AA_EnableHighDpiScaling"):
+        QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    if hasattr(Qt, "AA_UseHighDpiPixmaps"):
+        QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+
+
+_configure_high_dpi()
 
 
 class _IntegrationSignals(QObject):
@@ -99,15 +115,18 @@ class _SpeechBubble(QWidget):
     A small floating "speech bubble" window displayed above the desktop character.
     It is a separate top-level window so it can appear outside the main widget bounds.
     """
-    def __init__(self):
-        super().__init__(None)
+    def __init__(self, owner: QWidget):
+        super().__init__(owner)
         self.setWindowFlags(
             Qt.FramelessWindowHint
-            | Qt.Tool  # keep off taskbar
+            | Qt.Tool
             | Qt.WindowStaysOnTopHint
+            | Qt.WindowDoesNotAcceptFocus
         )
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
+        if sys.platform == "darwin" and hasattr(Qt, "WA_MacAlwaysShowToolWindow"):
+            self.setAttribute(Qt.WA_MacAlwaysShowToolWindow, True)
 
         self._label = QLabel(self)
         self._label.setWordWrap(True)
@@ -119,22 +138,18 @@ class _SpeechBubble(QWidget):
             "  background-color: rgba(255, 255, 255, 235);"
             "  color: #111;"
             "  border: 1px solid rgba(0, 0, 0, 40);"
-            "  border-radius: 12px;"
-            "  padding: 10px 12px;"
-            "  font-size: 24px;"
+            "  border-radius: 8px;"
+            "  padding: 8px 10px;"
+            "  font-size: 14px;"
             "}"
         )
 
-        # Fixed sizing (per user request).
-        f = self._label.font()
-        f.setPointSize(30)
-        self._label.setFont(f)
-        self._text_width = 520
-        # Accounts for label padding/border in stylesheet.
-        self._extra_h = 44
+        self._text_width = 320
+        self._content_width = 296
+        self._extra_h = 24
 
         # Default size; will be resized based on text.
-        self.resize(self._text_width, 110)
+        self.resize(self._text_width, 64)
         self._label.setGeometry(0, 0, self.width(), self.height())
         self.hide()
 
@@ -143,10 +158,17 @@ class _SpeechBubble(QWidget):
         self._label.setText(t)
 
         # Use font metrics to compute a stable height for the current fixed width.
-        w = int(self._text_width)
         metrics = QFontMetrics(self._label.font())
-        rect = metrics.boundingRect(0, 0, w, 2000, Qt.TextWordWrap, t)
-        h = int(max(120, min(320, rect.height() + self._extra_h)))
+        rect = metrics.boundingRect(
+            0,
+            0,
+            self._content_width,
+            1000,
+            Qt.TextWordWrap,
+            t,
+        )
+        w = int(self._text_width)
+        h = int(max(56, min(160, rect.height() + self._extra_h)))
         self.setFixedSize(w, h)
         self._label.setGeometry(0, 0, w, h)
 
@@ -154,14 +176,13 @@ class _SpeechBubble(QWidget):
         self.move(global_pos)
         # Show without stealing focus from the desktop pet.
         self.show()
-        self.raise_()
 
 class DesktopWife(QWidget):
     """
     Main Window
     """
     def resize_movie(self, frame_number):
-        """根据当前帧调整 GIF 大小"""
+        """按当前屏幕像素密度平滑渲染 GIF 帧。"""
         if not getattr(self, "movie", None) or not self.movie.isValid():
             return
         pixmap = self.movie.currentPixmap()
@@ -182,11 +203,24 @@ class DesktopWife(QWidget):
         if new_width <= 0 or new_height <= 0:
             return
         if not getattr(self, "_scaled_initialized", False):
-            self.movie.setScaledSize(QSize(new_width, new_height))
             self.PlayLabel.setFixedSize(new_width, new_height)
             self.setFixedSize(new_width, new_height)
+            self._movie_target_size = QSize(new_width, new_height)
             self._scaled_initialized = True
-        self._position_message()
+
+        target = getattr(self, "_movie_target_size", QSize(new_width, new_height))
+        pixel_ratio = max(1.0, float(self.devicePixelRatioF()))
+        physical_size = QSize(
+            max(1, round(target.width() * pixel_ratio)),
+            max(1, round(target.height() * pixel_ratio)),
+        )
+        rendered = pixmap.scaled(
+            physical_size,
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation,
+        )
+        rendered.setDevicePixelRatio(pixel_ratio)
+        self.PlayLabel.setPixmap(rendered)
     def __init__(self):
         super(DesktopWife, self).__init__()
         self.m_flag = False
@@ -230,16 +264,18 @@ class DesktopWife(QWidget):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | window_type)
         self.setAutoFillBackground(False)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
+        if sys.platform == "darwin" and hasattr(Qt, "WA_MacAlwaysShowToolWindow"):
+            self.setAttribute(Qt.WA_MacAlwaysShowToolWindow, True)
 
         # 创建显示 GIF 的标签
         self.PlayLabel = QLabel(self)
-        self.PlayLabel.setMovie(self.movie)  # 将电影设置到标签上
+        self.PlayLabel.setAlignment(Qt.AlignCenter)
         self.WindowSize = QDesktopWidget().screenGeometry()
 
         self.setWindowTitle("DesktopWife")
         # Old always-visible label is replaced by a timed floating bubble window.
         self.WindowMessage = None
-        self._bubble = _SpeechBubble()
+        self._bubble = _SpeechBubble(self)
         self._bubble_hide_timer = QTimer(self)
         self._bubble_hide_timer.setSingleShot(True)
         self._bubble_hide_timer.timeout.connect(self._hide_bubble)
@@ -261,7 +297,9 @@ class DesktopWife(QWidget):
         self._first_bubble_done = False
 
         self._Tray = Tray.TrayIcon(self)
-        self.outvoice = OutVoice.main()
+        self.outvoice = None
+        if not mac_byte_bootstrap.is_mac_byte():
+            self.outvoice = OutVoice.main()
         self._botmux_config = botmux_client.load_config()
         self._botmux_state = {
             "connected": False,
@@ -564,8 +602,6 @@ class DesktopWife(QWidget):
         self.movie = movie
         self.movie.setSpeed(95)
         self._scaled_initialized = False
-        if hasattr(self, "PlayLabel"):
-            self.PlayLabel.setMovie(self.movie)
         self.movie.frameChanged.connect(self.resize_movie)
         self.movie.start()
         self.resize_movie(0)
@@ -626,29 +662,29 @@ class DesktopWife(QWidget):
         :return: None
         """
         self.Menu = QMenu(self)
-        # QMenu.setFont() may be overridden by the global theme, so enforce
-        # the item font size through stylesheet to make the change visible.
-        self.Menu.setMinimumWidth(320)
         self.Menu.setStyleSheet(
-            "QMenu { font-size: 24px; }"
-            "QMenu::icon { width: 36px; height: 36px; }"
-            "QMenu::item { font-size: 24px; padding: 16px 30px; }"
+            "QMenu { padding: 4px; }"
+            "QMenu::icon { width: 18px; height: 18px; }"
+            "QMenu::item { padding: 6px 14px; }"
         )
 
-        self.custom_voice = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"自定义语音唤醒", self)
-        self.Menu.addAction(self.custom_voice)
+        show_legacy_controls = not mac_byte_bootstrap.is_mac_byte()
+        if show_legacy_controls:
+            self.custom_voice = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"自定义语音唤醒", self)
+            self.Menu.addAction(self.custom_voice)
 
-        self.out_voice = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"语音输入设置", self)
-        self.Menu.addAction(self.out_voice)
+            self.out_voice = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"语音输入设置", self)
+            self.Menu.addAction(self.out_voice)
 
         self.change_role = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"换个角色", self)
         self.Menu.addAction(self.change_role)
 
-        self.startup = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"启动方式", self)
-        self.Menu.addAction(self.startup)
+        if show_legacy_controls:
+            self.startup = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"启动方式", self)
+            self.Menu.addAction(self.startup)
 
-        self.open_input = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"唤醒输入", self)
-        self.Menu.addAction(self.open_input)
+            self.open_input = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"唤醒输入", self)
+            self.Menu.addAction(self.open_input)
 
         self.botmux_status = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"机器人状态", self)
         self.Menu.addAction(self.botmux_status)
@@ -662,14 +698,15 @@ class DesktopWife(QWidget):
         self.CloseWindowAction = QAction(QIcon(os.path.join(get_base_dir(), "image", "Quit.png")), u"退出程序", self)
         self.Menu.addAction(self.CloseWindowAction)
 
-        self.out_voice.triggered.connect(self.WeatherForecast)
-        self.custom_voice.triggered.connect(self.ProgramsConfig)
+        if show_legacy_controls:
+            self.out_voice.triggered.connect(self.WeatherForecast)
+            self.custom_voice.triggered.connect(self.ProgramsConfig)
+            self.open_input.triggered.connect(self.OpenInput)
+            self.startup.triggered.connect(self.Startup)
         self.change_role.triggered.connect(self.ChangeRole)
-        self.open_input.triggered.connect(self.OpenInput)
         self.botmux_status.triggered.connect(self.ShowBotmuxStatus)
         self.botmux_dashboard.triggered.connect(self.OpenBotmuxDashboard)
         self.StartTray.triggered.connect(self.SetTray)
-        self.startup.triggered.connect(self.Startup)
         self.CloseWindowAction.triggered.connect(self.CloseWindowActionEvent)
         # Restore the old feel: popup near the click/cursor position.
         if _pos is not None:
@@ -752,7 +789,8 @@ class DesktopWife(QWidget):
         
         :return: None
         """
-        self.outvoice.show()
+        if self.outvoice is not None:
+            self.outvoice.show()
 
     def mousePressEvent(self, event) -> None:
         """
@@ -828,7 +866,8 @@ def main():
                 pass
         except OSError:
             pass
-    VoiceToText.run()
+    if not mac_byte_bootstrap.is_mac_byte():
+        VoiceToText.run()
     app.exec_()
 
 if __name__ == "__main__":

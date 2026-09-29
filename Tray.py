@@ -19,10 +19,9 @@ class TrayIcon(QSystemTrayIcon):
 
     def createMenu(self):
         self.menu = QMenu()
-        # Match the main context menu size.
         self.menu.setStyleSheet(
-            "QMenu { font-size: 24px; }"
-            "QMenu::item { font-size: 24px; padding: 14px 24px; }"
+            "QMenu { padding: 4px; }"
+            "QMenu::item { padding: 6px 14px; }"
         )
         self.OpenGui = QAction("打开界面", self, triggered=self.show_window)
         self.quitAction = QAction("退出", self, triggered=self.quit)

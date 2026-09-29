@@ -5,6 +5,12 @@ import uuid
 import subprocess
 from platform_utils import hidden_subprocess_kwargs
 
+if sys.platform == "darwin":
+    os.environ.setdefault("QT_ENABLE_HIGHDPI_SCALING", "1")
+    os.environ.setdefault("QT_AUTO_SCREEN_SCALE_FACTOR", "1")
+    os.environ.setdefault("QT_SCALE_FACTOR_ROUNDING_POLICY", "PassThrough")
+
+
 def _pythonw():
     exe = sys.executable
     low = exe.lower()
