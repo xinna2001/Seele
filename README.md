@@ -67,9 +67,19 @@ Linux 还需由系统包管理器安装 Qt/XCB、PortAudio 和 Tk。Wayland、ma
 - 已安装且已配置：不重复打开安装流程；
 - 安装脚本要求字节内网；Botmux 固定从 npm 官方源获取 `latest`，不锁定具体版本；
 - Trae、Lark CLI、AgentBuddy 和 Botmux 登录均在 Terminal 中完成，链接和二维码不会被桌面窗口遮挡；
-- 每个登录阶段结束后都会等待用户按回车，再进入下一阶段。
+- Trae、Lark CLI 和 AgentBuddy 使用官方登录命令，授权成功并通过状态校验后自动进入下一阶段；
+- Botmux 保留需要用户决定的原生 setup 选项，希儿按当前提示播放对应语音；
+- 固定的 CLI 适配器和工作目录选项自动选择 `traex` 与 Botmux 默认值；
+- 安装、下载和扫码衔接均由进程退出码或真实终端提示驱动，不使用固定等待秒数；
+- 配置结束后自动安装 Seele 插件、启动 Botmux 并开启开机自启，不再要求用户按回车。
 
-登录语音使用固定的 16 kHz WAV 文件，详见 [`audio/mac_byte/README.md`](audio/mac_byte/README.md)。文件不存在或播放失败时会回退为终端文字提示，不影响安装。
+安装流程使用 17 个固定的 16 kHz WAV 文件，详见
+[`audio/mac_byte/README.md`](audio/mac_byte/README.md)。动态提示音不存在时会回退到
+macOS 系统语音，不影响安装。
+自动检测条件、完整安装命令和仅配置命令详见
+[`MAC_BYTE_AUTO_INSTALL_COMMANDS.md`](MAC_BYTE_AUTO_INSTALL_COMMANDS.md)。
+各 CLI 的官方无交互能力、隔离验证结果和低感知安装方案详见
+[`MAC_BYTE_ZERO_TOUCH_RESEARCH.md`](MAC_BYTE_ZERO_TOUCH_RESEARCH.md)。
 
 ## Botmux 配置
 

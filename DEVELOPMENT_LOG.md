@@ -14,14 +14,15 @@
 
 - 仓库：`https://github.com/xinna2001/Seele`
 - 当前分支：`main`
+- `v2.0.1` 发布提交：`a552425`
 - `v2.0.0` 发布基线提交：`8588a7d`
 - `v1.0.0`：提交 `0619912`
-- GitHub 已存在 `v1.0.0` 和 `v2.0.0` Release。
+- GitHub 已存在 `v1.0.0`、`v2.0.0` 和 `v2.0.1` Release。
 - `v2.0.0` 在“所有后续修改先本地验收”的约束提出前已经发布。不要擅自删除或改写。
 
 ## 2026-09-29 修复批次
 
-状态：已通过独立分支合并 `main`，尚未创建新 Tag 或 Release。
+状态：已通过独立分支合并 `main`，并包含在 `v2.0.1` 中。
 分支：`fix/mac-byte-bootstrap-audio`。
 修复提交：`d7a8ded`。
 
@@ -91,8 +92,78 @@
 - 气泡尺寸：`320 x 58`；从属关系、置顶标志、无焦点标志均验证通过。
 - 已人工检查 Retina 气泡截图，字号、换行和边距正常。
 - 已重新构建 `dist/Seele.app`，打包后 smoke test和代码签名校验通过。
-- 最新本地 `.app` 已启动，等待用户在真实屏幕验收。
-- 目标发布版本：`v2.0.1`。
+- 最新本地 `.app` 已启动并完成用户验收。
+- 已作为 `v2.0.1` 发布。
+
+## 2026-09-30 自动安装命令审计
+
+状态：仅新增本地说明文档，未修改自动安装代码，尚未提交或推送。
+
+1. 新增 `MAC_BYTE_AUTO_INSTALL_COMMANDS.md`。
+2. 按 `mac_byte_bootstrap.py` 当前实现完整记录 `full`、`setup` 和 `ready` 三种路径。
+3. 记录 Node.js、Trae CLI、Lark CLI、AgentBuddy、Botmux、Seele 插件、
+   Botmux 启动和自启动的全部命令。
+4. 记录 6 个语音提示、每个登录步骤后的回车暂停、Terminal 打开方式、
+   锁文件、状态文件和退出清理逻辑。
+5. 明确记录全局 npm registry 会被改为字节源且不会自动恢复，以及各工具
+   使用 `latest` 的版本漂移行为。
+6. 在根目录 `README.md` 增加命令清单入口。
+
+## 2026-10-06 低感知安装调研
+
+状态：仅新增本地调研文档，未修改安装代码，尚未提交或推送。
+
+1. 新增 `MAC_BYTE_ZERO_TOUCH_RESEARCH.md`。
+2. 核查 Trae CLI `0.207.1`、Lark CLI `1.0.94`、AgentBuddy `1.5.7`、
+   Botmux `3.33.0` 的官方安装、登录、配置和状态命令。
+3. 使用独立临时 HOME/XDG 目录验证四个 CLI 的首次认证行为，测试结束后已
+   物理删除全部临时目录，没有读取或覆盖当前用户配置。
+4. 验证 Trae CLI 只需 ByteCloud 二维码，Lark CLI 只需应用配置二维码和
+   OAuth，AgentBuddy 只需设备授权链接，Botmux 脚本化 setup 只需开放平台扫码。
+5. 确认核心链路不需要 `expect`；推荐使用官方命令、JSON/退出码检测和可恢复
+   Python 安装状态机。
+6. 记录本机 Docker daemon 未运行，Colima/Lima 只能提供 Linux 环境，不适合
+   验证 macOS Keychain、Terminal、launchd 和浏览器回调。
+7. 在根目录 `README.md` 增加低感知安装调研入口。
+8. 建议产品分为默认 Botmux 核心版和可选字节完整工具版，将默认认证次数由
+   最多 5 次减少为 Trae CLI 与 Botmux 两次。
+
+## 2026-10-08 低感知安装实现
+
+状态：本地实现与打包验收通过，目标版本 `v2.0.2`；待线上构建和新电脑验收。
+分支：`feat/mac-byte-zero-touch-setup`。
+
+### 实现内容
+
+1. Trae CLI 安装增加官方非交互环境变量，登录改为
+   `backend cn -> login --sso-device -> login status`，不再启动裸 TUI。
+2. Lark CLI 使用 `config show`、`config init --new`、`auth login --recommend`
+   和 `auth status --verify` 自动跳过已完成阶段并读回校验。
+3. AgentBuddy 使用 device login 和 JSON status，授权完成后自动继续。
+4. npm 内部源改为命令级 `--registry`，不再修改用户全局 npm registry。
+5. 新增 `botmux_setup_coach.py` 和独立 console helper；windowed 主程序不直接占用
+   Terminal stdin，由 helper 在 PTY 中透明代理原生 `botmux setup`。
+6. 根据 Botmux 当前真实提示播放 11 条动态语音；用户输入只转发，不落盘、不记录。
+7. 固定按菜单文字选择 `TRAE (CoCo) -> traex`，并自动接受默认工作目录；不依赖
+   菜单序号或固定等待秒数。
+8. 删除全部阶段间人工回车暂停；配置完成后自动安装插件、启动 Botmux、开启自启，
+   并执行 `botmux status` 与 `botmux autostart status`。
+9. 语音包扩展到 17 个 WAV，均为 16 kHz、Int16、双声道。
+
+### 本地验证
+
+- Python `compileall`：通过。
+- Python 单元测试：22 项通过。
+- Botmux 插件 build、validate 和 MCP smoke：通过。
+- 源码 PTY 与冻结 console helper 均验证自动输入结果为
+  `TRAE|traex||`；扫码提示不触发输入。
+- 17 个 WAV 均为 16 kHz、Int16、双声道；峰值约 `-8` 至 `-10 dB`，无削波、
+  整段静音或末尾截断。
+- 新增 11 条语音使用 Whisper `large-v3` 转写，操作语义与清单一致。
+- 本地 PyInstaller 构建、`2.0.2` 版本写入、ad-hoc 签名、严格签名校验和离屏
+  smoke test：通过。
+- 临时生成的 ZIP 通过 `unzip -t`，DMG 通过 `hdiutil verify`；过程文件已删除。
+- 待用户在全新 Apple Silicon 字节电脑完成首次安装验收。
 
 ## 已实现的 2.0 架构
 
@@ -105,7 +176,8 @@
 
 `mac_byte` 完整安装流程使用内网命令安装 Node.js、Trae CLI、Lark CLI 和
 AgentBuddy，并从 npm 官方源安装 `botmux@latest`。登录链接或二维码保留在
-Terminal 中展示，每个登录步骤结束后暂停，等待用户按回车继续。
+Terminal 中展示；官方命令和状态校验成功后自动继续。Botmux 原生 setup 由 PTY
+教练按提示播放语音并完成固定选择。
 
 ## 验证记录
 
@@ -127,17 +199,14 @@ git diff --check
 
 ## 后续待验收
 
-1. 用户在真实 Retina 屏幕检查角色清晰度和精简菜单尺寸。
-2. 在隔离环境验证“未安装 Botmux”时自动打开完整安装 Terminal。
-3. 验证每个登录阶段播放的语音内容与实际步骤一致。
-4. 验证登录链接、二维码和每步按回车暂停的交互。
-5. 验收通过后再重新构建 `mac_byte` `.app`、DMG 和 ZIP。
-6. 由用户决定是否更新现有 `v2.0.0`，或发布新的修订版本。
-7. 普通公网 macOS 版本、Developer ID 签名和公证仍未完成。
+1. 在全新字节 Apple Silicon 电脑验证 `v2.0.2` 完整安装。
+2. 验证 Trae、Lark CLI、AgentBuddy 的真实首次登录和自动续跑。
+3. 验证 Botmux 扫码、语音提示、`traex` 自动选择和默认目录自动确认。
+4. 普通公网 macOS 版本、Developer ID 签名和公证仍未完成。
 
 ## 新话题恢复步骤
 
 1. 先阅读本文件和 `.trae/skills/seele-botmux/SKILL.md`。
 2. 运行 `git status --short --branch`，保护所有本地未提交修改。
-3. 不以远端 `v2.0.0` 覆盖当前工作区。
+3. 不以远端 Release 安装包覆盖当前工作区的未提交修改。
 4. 按“后续待验收”继续，不提前创建 Tag 或发布安装包。
