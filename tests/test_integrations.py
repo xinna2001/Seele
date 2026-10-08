@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -267,6 +268,7 @@ class MacByteBootstrapTests(unittest.TestCase):
         self.assertNotIn("IFS= read -r _", script)
         self.assertIn("[语音占位符]", script)
 
+    @unittest.skipUnless(sys.platform == "darwin", "macOS bundle path test")
     def test_frozen_bootstrap_uses_console_coach_helper(self):
         resources = Path("/Applications/Seele.app/Contents/Resources")
         with (
