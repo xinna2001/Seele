@@ -111,6 +111,17 @@ lark-cli config init --new --lang zh_cn --name seele
 - 未配置时 `auth status --json --verify` 返回结构化错误：
   `type=config`、`subtype=not_configured`，退出码为 `3`。
 
+对 Lark CLI `1.0.97` 源码的补充核查：
+
+- `config init --new` 会创建 discovery device code，默认每 5 秒轮询一次，整体有效期
+  默认 600 秒；
+- 网页显示创建成功不等于 CLI 已收到完整的 App ID/App Secret，也不等于本机配置
+  已落盘；
+- 只有命令结束后再执行 `lark-cli config show` 成功，才能判定初始化真正完成；
+- 当前版本没有可用于 `config init` 的 `--no-wait` 或 `--device-code` 恢复参数；
+- 自动再次执行 `config init --new` 会创建新的 device code，可能重复创建应用，不能
+  作为无条件重试方案。
+
 已有 App ID/App Secret 时可以完全非交互初始化：
 
 ```bash
@@ -223,7 +234,7 @@ botmux autostart enable
 
 ## 五、已实现的编排
 
-`v2.0.2` 使用前台 Zsh 安装编排与 Python PTY 教练组合，每个阶段遵循：
+`v2.1.0` 使用前台 Zsh 安装编排与 Python PTY 教练组合，每个阶段遵循：
 
 ```text
 check -> run -> wait_for_user -> verify -> checkpoint
@@ -249,11 +260,15 @@ done
 
 要求：
 
+- Node.js、npm、Trae CLI、Lark CLI、AgentBuddy 和 Botmux 分别检测，已存在的命令
+  不重复安装；
 - 已登录阶段通过官方 status 命令跳过；
 - 运行状态写入 `~/.seele/mac_byte/bootstrap-status.json`；
 - 用户授权阶段由 Seele 播放语音、显示二维码并自动等待；
 - 成功后自动进入下一步，不要求用户按回车；
 - 失败时写入退出码并清理安装锁，可重新启动；
+- Lark CLI 应用初始化每轮只发起一次，命令结束后独立检查本地配置；未落盘时停止，
+  不在同一轮生成第二个 device code；
 - 所有凭据交给官方 CLI 或系统 Keychain 保存，Seele 不读取明文 token；
 - Botmux 版本和提示变化时不匹配就不自动发送按键。
 

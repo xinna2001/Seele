@@ -352,7 +352,9 @@ jobs:
 
           ### mac_byte 安装
 
+          - Node.js、npm、Trae CLI、Lark CLI、AgentBuddy 和 Botmux 独立检测，已有组件不重复安装。
           - Trae CLI、Lark CLI 和 AgentBuddy 在本人授权后自动校验并继续。
+          - Lark CLI 应用初始化每轮只执行一次，并以本机配置读回作为成功判据；未落盘时提示重启续跑。
           - Botmux 根据当前真实提示播放语音，固定自动选择 traex 和默认工作目录。
           - 安装过程不使用固定等待秒数，不再要求阶段间手动按回车。
 

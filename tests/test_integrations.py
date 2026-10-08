@@ -220,19 +220,48 @@ class MacByteBootstrapTests(unittest.TestCase):
             with patch.dict(os.environ, {"SEELE_EDITION": "mac"}, clear=True):
                 self.assertEqual(mac_byte_bootstrap.current_edition(path), "mac")
 
+    def test_bootstrap_title_reads_release_version_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "VERSION"
+            path.write_text("2.1.0\n", encoding="utf-8")
+            self.assertEqual(mac_byte_bootstrap.current_version(path), "2.1.0")
+
     def test_bootstrap_mode_uses_botmux_install_and_config_state(self):
-        with patch.object(mac_byte_bootstrap, "botmux_is_installed", return_value=False):
+        with patch.object(
+            mac_byte_bootstrap,
+            "missing_bootstrap_commands",
+            return_value=["botmux"],
+        ):
             self.assertEqual(mac_byte_bootstrap.bootstrap_mode(), "full")
         with (
-            patch.object(mac_byte_bootstrap, "botmux_is_installed", return_value=True),
+            patch.object(
+                mac_byte_bootstrap,
+                "missing_bootstrap_commands",
+                return_value=[],
+            ),
             patch.object(mac_byte_bootstrap, "botmux_is_configured", return_value=False),
         ):
             self.assertEqual(mac_byte_bootstrap.bootstrap_mode(), "setup")
         with (
-            patch.object(mac_byte_bootstrap, "botmux_is_installed", return_value=True),
+            patch.object(
+                mac_byte_bootstrap,
+                "missing_bootstrap_commands",
+                return_value=[],
+            ),
             patch.object(mac_byte_bootstrap, "botmux_is_configured", return_value=True),
         ):
             self.assertEqual(mac_byte_bootstrap.bootstrap_mode(), "ready")
+
+    def test_bootstrap_commands_are_detected_independently(self):
+        installed = {"node", "npm", "lark-cli"}
+        with patch.object(
+            mac_byte_bootstrap,
+            "_command_path",
+            side_effect=lambda command: f"/bin/{command}" if command in installed else None,
+        ):
+            missing = mac_byte_bootstrap.missing_bootstrap_commands()
+
+        self.assertEqual(missing, ["traex", "agentbuddy", "botmux"])
 
     def test_full_script_uses_official_login_commands_without_manual_pauses(self):
         script = mac_byte_bootstrap.build_bootstrap_script(
@@ -245,6 +274,12 @@ class MacByteBootstrapTests(unittest.TestCase):
             "npm install -g botmux@latest --registry https://registry.npmjs.org/",
             script,
         )
+        self.assertIn(
+            "if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1",
+            script,
+        )
+        for command in mac_byte_bootstrap.BOOTSTRAP_COMMANDS:
+            self.assertIn(f"command -v {command}", script)
         self.assertIn("TRAEX_INSTALL_ASSUME_YES=1", script)
         self.assertIn("TRAEX_INSTALL_REMOVE_COCO=1", script)
         self.assertIn("traex backend cn", script)
@@ -254,6 +289,16 @@ class MacByteBootstrapTests(unittest.TestCase):
             "lark-cli config init --new --lang zh_cn --name seele",
             script,
         )
+        self.assertEqual(
+            script.count("lark-cli config init --new --lang zh_cn --name seele"),
+            1,
+        )
+        self.assertGreaterEqual(
+            script.count("lark-cli config show >/dev/null 2>&1"),
+            2,
+        )
+        self.assertIn("本轮不会再次执行 config init", script)
+        self.assertIn("重新启动 Seele", script)
         self.assertIn("lark-cli auth login --recommend", script)
         self.assertIn("lark-cli auth status --json --verify", script)
         self.assertIn(
@@ -267,6 +312,25 @@ class MacByteBootstrapTests(unittest.TestCase):
         self.assertNotIn("\nbotmux setup\n", script)
         self.assertNotIn("IFS= read -r _", script)
         self.assertIn("[语音占位符]", script)
+
+    @unittest.skipUnless(sys.platform == "darwin", "requires /bin/zsh")
+    def test_generated_bootstrap_script_has_valid_zsh_syntax(self):
+        script = mac_byte_bootstrap.build_bootstrap_script(
+            "full",
+            script_path=Path("/tmp/bootstrap.command"),
+            lock_path=Path("/tmp/bootstrap.lock"),
+            status_path=Path("/tmp/bootstrap-status.json"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "bootstrap.command"
+            path.write_text(script, encoding="utf-8")
+            result = mac_byte_bootstrap.subprocess.run(
+                ["/bin/zsh", "-n", str(path)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     @unittest.skipUnless(sys.platform == "darwin", "macOS bundle path test")
     def test_frozen_bootstrap_uses_console_coach_helper(self):

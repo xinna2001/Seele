@@ -60,14 +60,15 @@ Linux 还需由系统包管理器安装 Qt/XCB、PortAudio 和 Tk。Wayland、ma
 
 ## mac_byte 版本
 
-仓库根目录的 [`EDITION`](EDITION) 为 `mac_byte` 时，Seele 会在 macOS 首次启动时检查 `botmux`：
+仓库根目录的 [`EDITION`](EDITION) 为 `mac_byte` 时，Seele 会在 macOS 首次启动时检查完整工具链：
 
-- 未安装 Botmux：自动打开 Terminal，按固定顺序安装 Node.js、Trae CLI、Lark CLI、AgentBuddy 和 `botmux@latest`；
-- 已安装但没有机器人配置：直接打开 `botmux setup`；
-- 已安装且已配置：不重复打开安装流程；
+- 独立检测 Node.js、npm、Trae CLI、Lark CLI、AgentBuddy 和 Botmux，已有组件直接跳过，只安装缺失项；
+- 工具链完整但没有机器人配置：直接打开 `botmux setup`；
+- 工具链完整且 Botmux 已配置：不重复打开安装流程；
 - 安装脚本要求字节内网；Botmux 固定从 npm 官方源获取 `latest`，不锁定具体版本；
 - Trae、Lark CLI、AgentBuddy 和 Botmux 登录均在 Terminal 中完成，链接和二维码不会被桌面窗口遮挡；
 - Trae、Lark CLI 和 AgentBuddy 使用官方登录命令，授权成功并通过状态校验后自动进入下一阶段；
+- Lark CLI 应用初始化每轮最多执行一次；网页流程结束后独立读取本机配置，未落盘时停止并提示重启 Seele 续跑，避免同轮重复创建应用；
 - Botmux 保留需要用户决定的原生 setup 选项，希儿按当前提示播放对应语音；
 - 固定的 CLI 适配器和工作目录选项自动选择 `traex` 与 Botmux 默认值；
 - 安装、下载和扫码衔接均由进程退出码或真实终端提示驱动，不使用固定等待秒数；
