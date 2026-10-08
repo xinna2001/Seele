@@ -93,6 +93,9 @@ jobs:
             --add-data "uid.json;." `
             --add-data "README.md;." `
             --add-data "CHANGELOG.md;." `
+            --add-data "DEVELOPMENT_LOG.md;." `
+            --add-data "MAC_BYTE_AUTO_INSTALL_COMMANDS.md;." `
+            --add-data "MAC_BYTE_ZERO_TOUCH_RESEARCH.md;." `
             --add-data "EDITION;." `
             --add-data "VERSION;." `
             --add-data "LICENSE;." `
@@ -220,6 +223,18 @@ jobs:
           APP_VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
+          mkdir -p build/coach-spec
+          python -m PyInstaller \
+            --noconfirm \
+            --clean \
+            --onefile \
+            --console \
+            --name SeeleBotmuxCoach \
+            --distpath build/coach-dist \
+            --workpath build/coach-work \
+            --specpath build/coach-spec \
+            botmux_setup_coach_entry.py
+
           python -m PyInstaller \
             --noconfirm \
             --clean \
@@ -241,10 +256,22 @@ jobs:
             --add-data "uid.json:." \
             --add-data "README.md:." \
             --add-data "CHANGELOG.md:." \
+            --add-data "DEVELOPMENT_LOG.md:." \
+            --add-data "MAC_BYTE_AUTO_INSTALL_COMMANDS.md:." \
+            --add-data "MAC_BYTE_ZERO_TOUCH_RESEARCH.md:." \
             --add-data "EDITION:." \
             --add-data "VERSION:." \
             --add-data "LICENSE:." \
             run_exe.py
+
+          mkdir -p "dist/Seele.app/Contents/Resources/bin"
+          cp "build/coach-dist/SeeleBotmuxCoach" \
+            "dist/Seele.app/Contents/Resources/bin/SeeleBotmuxCoach"
+          chmod 755 "dist/Seele.app/Contents/Resources/bin/SeeleBotmuxCoach"
+          script -q /dev/null \
+            env "SEELE_RESOURCES_DIR=$PWD/dist/Seele.app/Contents/Resources" \
+            "dist/Seele.app/Contents/Resources/bin/SeeleBotmuxCoach" \
+            /usr/bin/true </dev/null
 
           plist="dist/Seele.app/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" "$plist" \
@@ -322,6 +349,12 @@ jobs:
           notes="## Seele ${VERSION}
 
           这是 Seele 的正式封装版本，保留桌面宠物、语音输入、影刀 RPA 与 Botmux 插件能力。
+
+          ### mac_byte 安装
+
+          - Trae CLI、Lark CLI 和 AgentBuddy 在本人授权后自动校验并继续。
+          - Botmux 根据当前真实提示播放语音，固定自动选择 traex 和默认工作目录。
+          - 安装过程不使用固定等待秒数，不再要求阶段间手动按回车。
 
           ### 下载
 

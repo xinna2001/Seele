@@ -1,0 +1,12 @@
+音频名称	音频内容
+mac_byte_botmux_app_source_16k.wav	请选择飞书应用来源。建议选择“一次扫码创建新应用”。
+mac_byte_botmux_name_16k.wav	请为你的机器人取一个想要的名字。输入后按回车
+mac_byte_botmux_account_16k.wav	请确认屏幕显示的飞书账号是不是你自己的账号。正确请选择“确认并免扫码添加”；不正确请选择“更换账号”。
+mac_byte_botmux_scan_16k.wav	请打开飞书，扫描终端中的二维码，并确认当前账号和企业正确。
+mac_byte_botmux_owner_16k.wav	请输入你自己的完整字节邮箱，不要只输入邮箱前缀，输入后按回车。
+mac_byte_botmux_relogin_16k.wav	上次的飞书登录状态已经失效，请选择“重新扫码”。
+mac_byte_botmux_existing_app_16k.wav	请选择你要绑定的已有飞书应用。
+mac_byte_botmux_compatibility_16k.wav	自动创建应用失败。建议先选择“返回应用来源”并重试；只有普通方式持续失败时，再选择兼容模式。
+mac_byte_botmux_tenant_16k.wav	请选择租户类型。字节员工请选择“飞书中国版”。
+mac_byte_botmux_app_id_16k.wav	请输入已有飞书应用的 App ID，格式通常以 cli 下划线开头。
+mac_byte_botmux_app_secret_16k.wav	请输入同一个飞书应用的 App Secret。请不要把密钥发送给他人。

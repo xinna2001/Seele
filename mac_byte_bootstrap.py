@@ -116,21 +116,32 @@ fi
 """.strip()
 
 
-def _pause(label: str) -> str:
-    message = shlex.quote(f"{label} 已结束。确认完成后按回车继续...")
-    return f"""
-printf '\\n%s\\n' {message}
-IFS= read -r _
-""".strip()
-
-
 def _npm_prelude() -> str:
     return """
 export NVM_DIR="$HOME/.nvm"
 if [ -s "$NVM_DIR/nvm.sh" ]; then
   source "$NVM_DIR/nvm.sh"
 fi
+export PATH="$HOME/.local/bin:$HOME/.botmux/bin:$PATH"
+hash -r
 """.strip()
+
+
+def _botmux_coach_command() -> str:
+    if getattr(sys, "frozen", False):
+        resources = app_path()
+        command = [
+            "/usr/bin/env",
+            f"SEELE_RESOURCES_DIR={resources}",
+            str(resources / "bin" / "SeeleBotmuxCoach"),
+        ]
+    else:
+        command = [
+            sys.executable,
+            str(Path(__file__).with_name("run_exe.py")),
+            "--botmux-setup-coach",
+        ]
+    return shlex.join(command)
 
 
 def _full_install_commands() -> str:
@@ -146,40 +157,42 @@ nvm install --lts
 nvm use --lts
 node -v
 npm -v
-npm config set registry {BYTE_NPM_REGISTRY}
 
-curl -fsSL https://code.byted.org/api/tos-proxy/download/traex_install.sh | sh
+curl -fsSL https://code.byted.org/api/tos-proxy/download/traex_install.sh |
+  env TRAEX_INSTALL_ASSUME_YES=1 TRAEX_INSTALL_REMOVE_COCO=1 TRAEX_INSTALL_REMOVE_BREW=0 sh
 npm install -g @larksuite/cli@latest --registry {BYTE_NPM_REGISTRY}
-npm_config_registry={BYTE_NPM_REGISTRY} npm install -g agentbuddy@latest
+npm install -g agentbuddy@latest --registry {BYTE_NPM_REGISTRY}
 npm install -g botmux@latest --registry {PUBLIC_NPM_REGISTRY}
 
+{_npm_prelude()}
 printf '\\n安装完成，开始逐项登录。\\n'
 
-{_shell_voice("traex_login", "请登录 Trae CLI，并查看终端中的登录链接")}
-set +e
-traex
-TRAE_LOGIN_CODE=$?
-set -e
-if [ "$TRAE_LOGIN_CODE" -ne 0 ] && [ "$TRAE_LOGIN_CODE" -ne 130 ]; then
-  exit "$TRAE_LOGIN_CODE"
+traex backend cn
+if ! traex login status >/dev/null 2>&1; then
+  {_shell_voice("traex_login", "请登录 Trae CLI，并查看终端中的登录链接")}
+  traex login --sso-device
 fi
-{_pause("Trae CLI 登录")}
+traex login status
 
-{_shell_voice("lark_config", "请初始化飞书 CLI 应用，并在浏览器完成配置")}
-lark-cli config init
-{_pause("飞书 CLI 初始化")}
+if ! lark-cli config show >/dev/null 2>&1; then
+  {_shell_voice("lark_config", "请初始化飞书 CLI 应用，并在浏览器完成配置")}
+  lark-cli config init --new --lang zh_cn --name seele
+fi
 
-{_shell_voice("lark_login", "请登录飞书 CLI，并在浏览器完成权限授权")}
-lark-cli auth login --recommend
-{_pause("飞书 CLI 登录")}
+if ! lark-cli auth status --json --verify >/dev/null 2>&1; then
+  {_shell_voice("lark_login", "请登录飞书 CLI，并在浏览器完成权限授权")}
+  lark-cli auth login --recommend
+fi
+lark-cli auth status --json --verify
 
-{_shell_voice("agentbuddy_login", "请登录 Skill 空间，并查看终端中的登录链接")}
-agentbuddy login
-{_pause("Skill 空间登录")}
+if ! agentbuddy status --json >/dev/null 2>&1; then
+  {_shell_voice("agentbuddy_login", "请登录 Skill 空间，并查看终端中的登录链接")}
+  agentbuddy login --region cn --login-mode device --json --yes
+fi
+agentbuddy status --json
 
 {_shell_voice("botmux_setup", "请扫描终端二维码，完成 Botmux 机器人配置")}
-botmux setup
-{_pause("Botmux 配置")}
+{_botmux_coach_command()}
 """.strip()
 
 
@@ -187,8 +200,7 @@ def _setup_only_commands() -> str:
     return f"""
 {_npm_prelude()}
 {_shell_voice("botmux_setup", "请扫描终端二维码，完成 Botmux 机器人配置")}
-botmux setup
-{_pause("Botmux 配置")}
+{_botmux_coach_command()}
 """.strip()
 
 
@@ -215,6 +227,7 @@ def build_bootstrap_script(
     workflow = _full_install_commands() if mode == "full" else _setup_only_commands()
     return f"""#!/bin/zsh
 set -u
+set -o pipefail
 SCRIPT_FILE={shlex.quote(str(script_path))}
 LOCK_FILE={shlex.quote(str(lock_path))}
 STATUS_FILE={shlex.quote(str(status_path))}
@@ -244,9 +257,10 @@ set -e
 {_seele_plugin_commands()}
 botmux start
 botmux autostart enable
+botmux status
+botmux autostart status
 
-printf '\\nBotmux 已安装、配置并启动。按回车关闭这个终端窗口...\\n'
-IFS= read -r _
+printf '\\nBotmux 已安装、配置并启动。\\n'
 """
 
 

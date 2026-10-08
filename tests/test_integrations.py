@@ -8,6 +8,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import botmux_client
+import botmux_setup_coach
 import falseIntent
 import mac_byte_bootstrap
 import platform_utils
@@ -200,9 +201,14 @@ class IntentTests(unittest.TestCase):
 
 class MacByteBootstrapTests(unittest.TestCase):
     def test_all_mac_byte_voice_files_exist(self):
-        for voice_name, filename in mac_byte_bootstrap.VOICE_FILES.items():
+        voice_files = {
+            **mac_byte_bootstrap.VOICE_FILES,
+            **botmux_setup_coach.BOTMUX_VOICE_FILES,
+        }
+        for voice_name, filename in voice_files.items():
             with self.subTest(voice_name=voice_name, filename=filename):
-                self.assertTrue(mac_byte_bootstrap._voice_path(voice_name).is_file())
+                path = platform_utils.app_path("audio", "mac_byte", filename)
+                self.assertTrue(path.is_file())
 
     def test_release_edition_can_be_overridden(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -227,7 +233,7 @@ class MacByteBootstrapTests(unittest.TestCase):
         ):
             self.assertEqual(mac_byte_bootstrap.bootstrap_mode(), "ready")
 
-    def test_full_script_installs_latest_botmux_and_pauses_after_logins(self):
+    def test_full_script_uses_official_login_commands_without_manual_pauses(self):
         script = mac_byte_bootstrap.build_bootstrap_script(
             "full",
             script_path=Path("/tmp/bootstrap.command"),
@@ -238,11 +244,43 @@ class MacByteBootstrapTests(unittest.TestCase):
             "npm install -g botmux@latest --registry https://registry.npmjs.org/",
             script,
         )
+        self.assertIn("TRAEX_INSTALL_ASSUME_YES=1", script)
+        self.assertIn("TRAEX_INSTALL_REMOVE_COCO=1", script)
+        self.assertIn("traex backend cn", script)
+        self.assertIn("traex login --sso-device", script)
+        self.assertIn("traex login status", script)
+        self.assertIn(
+            "lark-cli config init --new --lang zh_cn --name seele",
+            script,
+        )
         self.assertIn("lark-cli auth login --recommend", script)
-        self.assertIn("agentbuddy login", script)
-        self.assertIn("botmux setup", script)
-        self.assertGreaterEqual(script.count("IFS= read -r _"), 5)
+        self.assertIn("lark-cli auth status --json --verify", script)
+        self.assertIn(
+            "agentbuddy login --region cn --login-mode device --json --yes",
+            script,
+        )
+        self.assertIn("agentbuddy status --json", script)
+        self.assertIn("--botmux-setup-coach", script)
+        self.assertNotIn("npm config set registry", script)
+        self.assertNotIn("\ntraex\n", script)
+        self.assertNotIn("\nbotmux setup\n", script)
+        self.assertNotIn("IFS= read -r _", script)
         self.assertIn("[语音占位符]", script)
+
+    def test_frozen_bootstrap_uses_console_coach_helper(self):
+        resources = Path("/Applications/Seele.app/Contents/Resources")
+        with (
+            patch.object(mac_byte_bootstrap.sys, "frozen", True, create=True),
+            patch.object(mac_byte_bootstrap, "app_path", return_value=resources),
+        ):
+            command = mac_byte_bootstrap._botmux_coach_command()
+
+        self.assertIn("SEELE_RESOURCES_DIR=", command)
+        self.assertIn(
+            "/Applications/Seele.app/Contents/Resources/bin/SeeleBotmuxCoach",
+            command,
+        )
+        self.assertNotIn("--botmux-setup-coach", command)
 
     def test_botmux_configuration_requires_a_nonempty_catalog(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -268,7 +306,10 @@ class MacByteBootstrapTests(unittest.TestCase):
             self.assertIsNotNone(script)
             if os.name != "nt":
                 self.assertEqual(script.stat().st_mode & 0o777, 0o700)
-            self.assertIn("botmux setup", script.read_text(encoding="utf-8"))
+            self.assertIn(
+                "--botmux-setup-coach",
+                script.read_text(encoding="utf-8"),
+            )
             self.assertEqual(
                 run.call_args.args[0][:3],
                 ["/usr/bin/open", "-a", "Terminal"],

@@ -58,6 +58,9 @@ def main():
     argv = sys.argv[1:]
     if argv == ["--smoke-test"]:
         return _run_smoke_test()
+    if argv and argv[0] == "--botmux-setup-coach":
+        import botmux_setup_coach
+        return botmux_setup_coach.main(argv[1:])
     if len(argv) >= 2 and argv[0] == "--splash":
         _run_splash(argv[1])
         return 0
