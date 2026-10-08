@@ -19,6 +19,14 @@ EDITION_NAME = "mac_byte"
 BYTE_NPM_REGISTRY = "https://bnpm.byted.org/"
 PUBLIC_NPM_REGISTRY = "https://registry.npmjs.org/"
 LOCK_TTL_SECONDS = 6 * 60 * 60
+BOOTSTRAP_COMMANDS = (
+    "node",
+    "npm",
+    "traex",
+    "lark-cli",
+    "agentbuddy",
+    "botmux",
+)
 
 VOICE_FILES = {
     "install": "mac_byte_install_16k.wav",
@@ -39,6 +47,14 @@ def current_edition(path: str | os.PathLike | None = None) -> str:
         return edition_path.read_text(encoding="utf-8").strip()
     except OSError:
         return ""
+
+
+def current_version(path: str | os.PathLike | None = None) -> str:
+    version_path = Path(path) if path else app_path("VERSION")
+    try:
+        return version_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return "unknown"
 
 
 def is_mac_byte() -> bool:
@@ -76,8 +92,12 @@ def _command_path(command: str) -> str | None:
     return lines[-1] if lines else None
 
 
-def botmux_is_installed() -> bool:
-    return _command_path("botmux") is not None
+def missing_bootstrap_commands() -> list[str]:
+    return [
+        command
+        for command in BOOTSTRAP_COMMANDS
+        if _command_path(command) is None
+    ]
 
 
 def botmux_is_configured(home: str | os.PathLike | None = None) -> bool:
@@ -93,7 +113,7 @@ def botmux_is_configured(home: str | os.PathLike | None = None) -> bool:
 
 
 def bootstrap_mode(home: str | os.PathLike | None = None) -> str:
-    if not botmux_is_installed():
+    if missing_bootstrap_commands():
         return "full"
     if not botmux_is_configured(home):
         return "setup"
@@ -148,23 +168,65 @@ def _full_install_commands() -> str:
     return f"""
 {_shell_voice("install", "开始安装 Botmux 及字节内部依赖")}
 
-export NVM_DIR="$HOME/.nvm"
-if [ ! -s "$NVM_DIR/nvm.sh" ]; then
-  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+{_npm_prelude()}
+
+if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+  printf '\\n[已安装] Node.js: %s\\n' "$(command -v node)"
+  printf '[已安装] npm: %s\\n' "$(command -v npm)"
+else
+  printf '\\n[待安装] 未同时检测到 Node.js 和 npm，开始安装。\\n'
+  export NVM_DIR="$HOME/.nvm"
+  if [ ! -s "$NVM_DIR/nvm.sh" ]; then
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+  fi
+  source "$NVM_DIR/nvm.sh"
+  nvm install --lts
+  nvm use --lts
+  hash -r
 fi
-source "$NVM_DIR/nvm.sh"
-nvm install --lts
-nvm use --lts
 node -v
 npm -v
 
-curl -fsSL https://code.byted.org/api/tos-proxy/download/traex_install.sh |
-  env TRAEX_INSTALL_ASSUME_YES=1 TRAEX_INSTALL_REMOVE_COCO=1 TRAEX_INSTALL_REMOVE_BREW=0 sh
-npm install -g @larksuite/cli@latest --registry {BYTE_NPM_REGISTRY}
-npm install -g agentbuddy@latest --registry {BYTE_NPM_REGISTRY}
-npm install -g botmux@latest --registry {PUBLIC_NPM_REGISTRY}
+if command -v traex >/dev/null 2>&1; then
+  printf '[已安装] Trae CLI: %s\\n' "$(command -v traex)"
+else
+  printf '[待安装] Trae CLI\\n'
+  curl -fsSL https://code.byted.org/api/tos-proxy/download/traex_install.sh |
+    env TRAEX_INSTALL_ASSUME_YES=1 TRAEX_INSTALL_REMOVE_COCO=1 TRAEX_INSTALL_REMOVE_BREW=0 sh
+  hash -r
+fi
+
+if command -v lark-cli >/dev/null 2>&1; then
+  printf '[已安装] Lark CLI: %s\\n' "$(command -v lark-cli)"
+else
+  printf '[待安装] Lark CLI\\n'
+  npm install -g @larksuite/cli@latest --registry {BYTE_NPM_REGISTRY}
+  hash -r
+fi
+
+if command -v agentbuddy >/dev/null 2>&1; then
+  printf '[已安装] AgentBuddy: %s\\n' "$(command -v agentbuddy)"
+else
+  printf '[待安装] AgentBuddy\\n'
+  npm install -g agentbuddy@latest --registry {BYTE_NPM_REGISTRY}
+  hash -r
+fi
+
+if command -v botmux >/dev/null 2>&1; then
+  printf '[已安装] Botmux: %s\\n' "$(command -v botmux)"
+else
+  printf '[待安装] Botmux\\n'
+  npm install -g botmux@latest --registry {PUBLIC_NPM_REGISTRY}
+  hash -r
+fi
 
 {_npm_prelude()}
+for required_command in node npm traex lark-cli agentbuddy botmux; do
+  if ! command -v "$required_command" >/dev/null 2>&1; then
+    printf '\\n安装校验失败：找不到命令 %s。\\n' "$required_command" >&2
+    exit 1
+  fi
+done
 printf '\\n安装完成，开始逐项登录。\\n'
 
 traex backend cn
@@ -176,7 +238,19 @@ traex login status
 
 if ! lark-cli config show >/dev/null 2>&1; then
   {_shell_voice("lark_config", "请初始化飞书 CLI 应用，并在浏览器完成配置")}
-  lark-cli config init --new --lang zh_cn --name seele
+  lark_config_init_code=0
+  lark-cli config init --new --lang zh_cn --name seele || lark_config_init_code=$?
+  if lark-cli config show >/dev/null 2>&1; then
+    printf '\\n已在本机检测到飞书 CLI 应用配置。\\n'
+  else
+    printf '\\n飞书网页流程已结束，但本机仍未检测到应用配置。\\n' >&2
+    printf '为避免重复创建应用，本轮不会再次执行 config init。\\n' >&2
+    printf '请关闭此终端并重新启动 Seele；已安装组件会被保留，只会续跑未完成阶段。\\n' >&2
+    if [ "$lark_config_init_code" -eq 0 ]; then
+      lark_config_init_code=1
+    fi
+    exit "$lark_config_init_code"
+  fi
 fi
 
 if ! lark-cli auth status --json --verify >/dev/null 2>&1; then
@@ -225,6 +299,7 @@ def build_bootstrap_script(
     if mode not in {"full", "setup"}:
         raise ValueError("bootstrap mode must be full or setup")
     workflow = _full_install_commands() if mode == "full" else _setup_only_commands()
+    version = current_version()
     return f"""#!/bin/zsh
 set -u
 set -o pipefail
@@ -247,7 +322,7 @@ finish() {{
 trap finish EXIT
 
 clear
-printf '\\nSeele 2.0 mac_byte - Botmux 安装与登录\\n'
+printf '\\nSeele {version} mac_byte - Botmux 安装与登录\\n'
 printf '安装命令需要字节内网。登录阶段会展示链接或二维码。\\n\\n'
 
 set -e

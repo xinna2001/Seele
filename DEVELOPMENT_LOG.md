@@ -14,10 +14,15 @@
 
 - 仓库：`https://github.com/xinna2001/Seele`
 - 当前分支：`main`
+- `v2.0.3` 正式测试发布提交：`ce59731`
+- `v2.0.2` Tag 提交：`a82f064`；该版本因 Windows CI 中的 macOS 路径断言失败，
+  未生成 GitHub Release，不作为测试包使用。
 - `v2.0.1` 发布提交：`a552425`
 - `v2.0.0` 发布基线提交：`8588a7d`
 - `v1.0.0`：提交 `0619912`
-- GitHub 已存在 `v1.0.0`、`v2.0.0` 和 `v2.0.1` Release。
+- GitHub 已存在 `v1.0.0`、`v2.0.0`、`v2.0.1` 和 `v2.0.3` Release。
+- `v2.0.3` Release：
+  `https://github.com/xinna2001/Seele/releases/tag/v2.0.3`。
 - `v2.0.0` 在“所有后续修改先本地验收”的约束提出前已经发布。不要擅自删除或改写。
 
 ## 2026-09-29 修复批次
@@ -130,8 +135,11 @@
 
 ## 2026-10-08 低感知安装实现
 
-状态：本地实现与打包验收通过，正式测试版本 `v2.0.3`；待线上构建和新电脑验收。
+状态：已合并 `main` 并发布 `v2.0.3`；本地和线上构建验收通过，待新电脑首次安装验收。
 分支：`feat/mac-byte-zero-touch-setup`。
+功能提交：`8f51712`。
+合并提交：`a82f064`。
+Windows CI 兼容修复及 `v2.0.3` Tag 提交：`ce59731`。
 
 ### 实现内容
 
@@ -166,6 +174,64 @@
 - `v2.0.2` 首次线上构建仅因 macOS 路径断言未跳过 Windows 而失败；产品测试均通过。
   `v2.0.3` 增加平台条件后重新发布，不改写已推送的旧 Tag。
 - 待用户在全新 Apple Silicon 字节电脑完成首次安装验收。
+
+### 线上发布验证
+
+- `v2.0.3` 跨平台测试工作流 `37774249332`：Windows、macOS、Ubuntu 全部成功。
+- `main` 跨平台测试工作流 `37774245402`：全部成功。
+- `v2.0.3` 打包发布工作流 `37774249352`：成功创建 GitHub Release。
+- macOS 在线资产均返回 HTTP 200：
+  - `Seele-2.0.3-mac_byte-macos-arm64.dmg`
+  - `Seele-2.0.3-mac_byte-macos-arm64.zip`
+  - `SHA256SUMS-mac_byte.txt`
+  - `release-manifest-mac_byte.json`
+- 在线 manifest 确认版本为 `2.0.3`、平台为 `macos-arm64`、构建提交为
+  `ce59731db2d27fce24ed4c41c17690bb4039c427`。
+- 在线 SHA256：
+  - ZIP：`fe84a16b6f973fce597ed48d8fdb5aa028ecd7fcab57d1fe29f4404c561b5dcf`
+  - DMG：`508bfa42039a698df2fd3a0f8ea5006c587850dd9683056dc9c0f6581e9fc1bc`
+- 已重新下载线上 ZIP 并通过 SHA256 与 `unzip -t` 校验；包内包含 17 个 WAV 和
+  可执行的 `Contents/Resources/bin/SeeleBotmuxCoach`。临时下载文件已物理删除。
+
+## 2026-10-08 v2.1.0 安装恢复与独立检测
+
+状态：功能实现和本地打包验收通过，准备发布 `v2.1.0`。
+分支：`feat/mac-byte-bootstrap-recovery-v2.1.0`。
+
+### 问题结论
+
+1. Lark CLI `1.0.97` 的 `config init --new` 使用 discovery device code 轮询应用
+   配置，默认轮询间隔 5 秒、整体有效期 600 秒。
+2. 网页显示应用创建成功不代表 CLI 已收到完整凭据，也不代表配置已写入本机；
+   `lark-cli config show` 才是本地落盘的独立判据。
+3. 当前版本没有供 `config init` 使用的 `--no-wait` 或 `--device-code` 恢复参数。
+   同轮自动重跑会生成新的 device code，可能重复创建应用，因此不采用自动二次初始化。
+
+### 实现内容
+
+1. 启动时独立检查 `node`、`npm`、`traex`、`lark-cli`、`agentbuddy` 和 `botmux`；
+   任一缺失进入完整流程，所有已存在组件分别跳过安装。
+2. Node.js/npm、Trae CLI、Lark CLI、AgentBuddy 和 Botmux 的原安装命令与顺序保留，
+   仅增加安装前检测和安装后统一命令解析校验。
+3. Lark CLI 应用初始化每轮最多执行一次；命令退出后立即执行只读
+   `lark-cli config show`，未落盘则失败退出并提示关闭 Terminal、重启 Seele 续跑。
+4. 安装失败退出时仍由原 trap 原子写入失败状态并清理锁文件，下一轮不会重复安装
+   已存在的组件。
+5. Terminal 标题从 `VERSION` 动态读取，版本升级为 `2.1.0`。
+6. 版本规则固定为语义化三段式：小修复递增 PATCH（如 `2.1.1`），较大功能递增
+   MINOR（如 `2.2.0`），由改动范围和兼容性判断。
+
+### 回归覆盖
+
+- 独立命令检测结果与 `full/setup/ready` 模式选择。
+- 六个组件安装前条件判断和安装后统一校验。
+- Lark CLI 初始化命令仅出现一次，结束后执行第二次本地配置检查。
+- 生成的完整安装脚本通过 `/bin/zsh -n`。
+- Python `compileall`：通过。
+- Python 单元测试：25 项通过。
+- Botmux 插件 build、validate 和 MCP smoke：通过。
+- 本地 arm64 coach 和 `.app` 构建、版本写入、ad-hoc 严格签名与离屏 smoke：通过。
+- 本地 ZIP 通过 `unzip -t`，DMG 通过 `hdiutil verify`；临时构建目录已物理删除。
 
 ## 已实现的 2.0 架构
 
@@ -211,4 +277,5 @@ git diff --check
 1. 先阅读本文件和 `.trae/skills/seele-botmux/SKILL.md`。
 2. 运行 `git status --short --branch`，保护所有本地未提交修改。
 3. 不以远端 Release 安装包覆盖当前工作区的未提交修改。
-4. 按“后续待验收”继续，不提前创建 Tag 或发布安装包。
+4. 按“后续待验收”在全新字节 Apple Silicon 电脑验证 `v2.0.3`，不要重复创建
+   Tag 或发布安装包。
