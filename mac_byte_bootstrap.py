@@ -147,13 +147,18 @@ hash -r
 """.strip()
 
 
+def _botmux_coach_helper_path() -> Path:
+    return app_path("bin", "SeeleBotmuxCoach")
+
+
 def _botmux_coach_command() -> str:
     if getattr(sys, "frozen", False):
         resources = app_path()
+        helper = _botmux_coach_helper_path()
         command = [
             "/usr/bin/env",
             f"SEELE_RESOURCES_DIR={resources}",
-            str(resources / "bin" / "SeeleBotmuxCoach"),
+            str(helper),
         ]
     else:
         command = [

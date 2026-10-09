@@ -1,5 +1,12 @@
 # 更新记录
 
+## 2.1.1
+
+- 修复 macOS 冻结应用优先把 `Contents/Frameworks` 误判为资源根目录，导致
+  `SeeleBotmuxCoach` 从不存在的 `Frameworks/bin` 启动后立即退出的问题。
+- `.app` 布局现在优先使用标准 `Contents/Resources`，兼容 macOS App Translocation。
+- 发布流程新增冻结主程序的 coach 路径与可执行权限 smoke test。
+
 ## 2.1.0
 
 - 首次启动改为独立检测 Node.js、npm、Trae CLI、Lark CLI、AgentBuddy 和 Botmux，

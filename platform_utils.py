@@ -16,12 +16,12 @@ def get_base_dir() -> Path:
         return source_dir
 
     executable_dir = Path(sys.executable).resolve().parent
-    candidates = [
-        Path(getattr(sys, "_MEIPASS", executable_dir)),
-        executable_dir,
-        executable_dir.parent / "Resources",
-        source_dir,
-    ]
+    frozen_dir = Path(getattr(sys, "_MEIPASS", executable_dir))
+    bundle_resources = executable_dir.parent / "Resources"
+    if executable_dir.name == "MacOS" and executable_dir.parent.name == "Contents":
+        candidates = [bundle_resources, frozen_dir, executable_dir, source_dir]
+    else:
+        candidates = [frozen_dir, executable_dir, bundle_resources, source_dir]
     for candidate in candidates:
         if (candidate / "state.json").is_file():
             return candidate

@@ -281,6 +281,7 @@ jobs:
           codesign --force --deep --sign - "dist/Seele.app"
           codesign --verify --deep --strict --verbose=2 "dist/Seele.app"
           QT_QPA_PLATFORM=offscreen "dist/Seele.app/Contents/MacOS/Seele" --smoke-test
+          "dist/Seele.app/Contents/MacOS/Seele" --botmux-coach-smoke-test
 
       - name: Build mac_byte DMG, ZIP, and checksums
         shell: bash
@@ -356,6 +357,7 @@ jobs:
           - Trae CLI、Lark CLI 和 AgentBuddy 在本人授权后自动校验并继续。
           - Lark CLI 应用初始化每轮只执行一次，并以本机配置读回作为成功判据；未落盘时提示重启续跑。
           - Botmux 根据当前真实提示播放语音，固定自动选择 traex 和默认工作目录。
+          - macOS 安装包固定从 Contents/Resources 启动 Botmux coach，并在发布前执行包内路径自检。
           - 安装过程不使用固定等待秒数，不再要求阶段间手动按回车。
 
           ### 下载

@@ -54,10 +54,19 @@ def _run_smoke_test():
     return 0 if valid else 1
 
 
+def _run_botmux_coach_smoke_test():
+    import mac_byte_bootstrap
+
+    helper = mac_byte_bootstrap._botmux_coach_helper_path()
+    return 0 if helper.is_file() and os.access(helper, os.X_OK) else 1
+
+
 def main():
     argv = sys.argv[1:]
     if argv == ["--smoke-test"]:
         return _run_smoke_test()
+    if argv == ["--botmux-coach-smoke-test"]:
+        return _run_botmux_coach_smoke_test()
     if argv and argv[0] == "--botmux-setup-coach":
         import botmux_setup_coach
         return botmux_setup_coach.main(argv[1:])
