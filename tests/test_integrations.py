@@ -428,8 +428,8 @@ class PlatformPathTests(unittest.TestCase):
                 self.assertEqual(platform_utils.get_base_dir(), resources.resolve())
                 command = mac_byte_bootstrap._botmux_coach_command()
 
-            self.assertIn(str(helper), command)
-            self.assertNotIn(str(frameworks / "bin"), command)
+            self.assertIn(str(helper.resolve()), command)
+            self.assertNotIn(str((frameworks / "bin").resolve()), command)
 
 
 if __name__ == "__main__":
