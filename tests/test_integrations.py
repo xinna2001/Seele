@@ -15,6 +15,7 @@ import mac_byte_bootstrap
 import platform_utils
 import rpa_bridge
 import rpa_service
+import run_exe
 
 
 class BotmuxConfigTests(unittest.TestCase):
@@ -337,7 +338,11 @@ class MacByteBootstrapTests(unittest.TestCase):
         resources = Path("/Applications/Seele.app/Contents/Resources")
         with (
             patch.object(mac_byte_bootstrap.sys, "frozen", True, create=True),
-            patch.object(mac_byte_bootstrap, "app_path", return_value=resources),
+            patch.object(
+                mac_byte_bootstrap,
+                "app_path",
+                side_effect=lambda *parts: resources.joinpath(*parts),
+            ),
         ):
             command = mac_byte_bootstrap._botmux_coach_command()
 
@@ -347,6 +352,18 @@ class MacByteBootstrapTests(unittest.TestCase):
             command,
         )
         self.assertNotIn("--botmux-setup-coach", command)
+
+    def test_packaged_botmux_coach_smoke_checks_executable_helper(self):
+        with tempfile.TemporaryDirectory() as directory:
+            helper = Path(directory) / "SeeleBotmuxCoach"
+            helper.write_text("", encoding="utf-8")
+            helper.chmod(0o755)
+            with patch.object(
+                mac_byte_bootstrap,
+                "_botmux_coach_helper_path",
+                return_value=helper,
+            ):
+                self.assertEqual(run_exe._run_botmux_coach_smoke_test(), 0)
 
     def test_botmux_configuration_requires_a_nonempty_catalog(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -393,16 +410,26 @@ class PlatformPathTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             contents = Path(directory) / "Seele.app" / "Contents"
             executable = contents / "MacOS" / "Seele"
+            frameworks = contents / "Frameworks"
             resources = contents / "Resources"
             executable.parent.mkdir(parents=True)
-            resources.mkdir(parents=True)
+            executable.write_text("", encoding="utf-8")
+            frameworks.mkdir(parents=True)
+            (frameworks / "state.json").write_text("{}", encoding="utf-8")
+            helper = resources / "bin" / "SeeleBotmuxCoach"
+            helper.parent.mkdir(parents=True)
+            helper.write_text("", encoding="utf-8")
             (resources / "state.json").write_text("{}", encoding="utf-8")
             with (
                 patch.object(platform_utils.sys, "frozen", True, create=True),
-                patch.object(platform_utils.sys, "_MEIPASS", str(contents / "Frameworks"), create=True),
+                patch.object(platform_utils.sys, "_MEIPASS", str(frameworks), create=True),
                 patch.object(platform_utils.sys, "executable", str(executable)),
             ):
                 self.assertEqual(platform_utils.get_base_dir(), resources.resolve())
+                command = mac_byte_bootstrap._botmux_coach_command()
+
+            self.assertIn(str(helper), command)
+            self.assertNotIn(str(frameworks / "bin"), command)
 
 
 if __name__ == "__main__":

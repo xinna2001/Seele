@@ -253,6 +253,46 @@ Windows CI 兼容修复及 `v2.0.3` Tag 提交：`ce59731`。
 - 已下载线上 macOS ZIP 并通过发布 SHA256、`unzip -t`、包内版本、17 条 WAV
   和 helper `0755` 权限校验；临时下载文件已物理删除。
 
+## 2026-10-09 v2.1.1 Botmux coach 路径修复
+
+状态：根因确认、代码修复和本地打包验收均通过，准备发布 `v2.1.1`。
+分支：`fix/mac-byte-coach-resource-path-v2.1.1`。
+
+### 问题证据
+
+1. 用户首次安装截图中，前三项登录均已成功，进入 Botmux 配置前立即报错：
+   `Contents/Frameworks/bin/SeeleBotmuxCoach: No such file or directory`，随后 Terminal
+   显示“进程已完成”。
+2. 在线 `v2.1.0` ZIP 确认 helper 实际位于
+   `Contents/Resources/bin/SeeleBotmuxCoach`。
+3. PyInstaller 同时在 `Contents/Frameworks` 创建了指向 `Resources` 数据文件的
+   symlink。旧 `get_base_dir()` 先检查 `_MEIPASS=Frameworks`，因此被
+   `Frameworks/state.json` symlink 提前命中并返回了错误的资源根目录。
+4. 该错误是确定性的路径计算问题，重开 Terminal 后执行同一命令仍会复现，不采用
+   自动重试或重复运行 `botmux setup`。
+
+### 修复内容
+
+1. 标准 macOS `.app` 布局固定优先解析 `Contents/Resources`，其他平台继续优先
+   使用 PyInstaller `_MEIPASS`。
+2. Botmux coach 命令统一通过包内 helper 路径函数生成。
+3. 发布流程新增 `--botmux-coach-smoke-test`，由冻结后的主程序检查最终解析路径下
+   helper 是否真实存在且可执行。
+4. 回归测试同时在 `Frameworks` 和 `Resources` 放置可命中的 `state.json`，
+   确认最终仍选择 `Resources/bin/SeeleBotmuxCoach`。
+5. 按补丁更新规则将版本升级为 `2.1.1`。
+
+### 本地验证
+
+- Python `compileall`：通过。
+- Python 单元测试：26 项通过。
+- Botmux 插件 build、validate 和 MCP smoke：通过。
+- 实际 arm64 `.app` 中 `Frameworks/state.json` 为指向 `Resources` 的 symlink；
+  冻结主程序 `--botmux-coach-smoke-test` 通过。
+- 包内 helper 位于 `Contents/Resources/bin` 且权限为 `0755`。
+- ad-hoc 严格签名、主程序离屏 smoke、ZIP `unzip -t` 和 DMG `hdiutil verify`
+  均通过；临时构建目录已物理删除。
+
 ## 已实现的 2.0 架构
 
 - `Seele.py`：PyQt 桌宠、托盘菜单、气泡和 Botmux 状态展示。
