@@ -14,6 +14,7 @@
 
 - 仓库：`https://github.com/xinna2001/Seele`
 - 当前分支：`main`
+- `v2.1.1` 发布提交：`860edf2`
 - `v2.1.0` 发布提交：`1c64d7c`
 - `v2.0.3` 正式测试发布提交：`ce59731`
 - `v2.0.2` Tag 提交：`a82f064`；该版本因 Windows CI 中的 macOS 路径断言失败，
@@ -21,7 +22,10 @@
 - `v2.0.1` 发布提交：`a552425`
 - `v2.0.0` 发布基线提交：`8588a7d`
 - `v1.0.0`：提交 `0619912`
-- GitHub 已存在 `v1.0.0`、`v2.0.0`、`v2.0.1`、`v2.0.3` 和 `v2.1.0` Release。
+- GitHub 已存在 `v1.0.0`、`v2.0.0`、`v2.0.1`、`v2.0.3`、`v2.1.0`
+  和 `v2.1.1` Release。
+- `v2.1.1` Release：
+  `https://github.com/xinna2001/Seele/releases/tag/v2.1.1`。
 - `v2.1.0` Release：
   `https://github.com/xinna2001/Seele/releases/tag/v2.1.0`。
 - `v2.0.3` Release：
@@ -255,8 +259,11 @@ Windows CI 兼容修复及 `v2.0.3` Tag 提交：`ce59731`。
 
 ## 2026-10-09 v2.1.1 Botmux coach 路径修复
 
-状态：根因确认、代码修复和本地打包验收均通过，准备发布 `v2.1.1`。
+状态：已合并 `main` 并发布 `v2.1.1`，本地和线上包验证通过。
 分支：`fix/mac-byte-coach-resource-path-v2.1.1`。
+功能提交：`5e6d13f`。
+合并提交：`17a1e2e`。
+跨平台测试修复及 Tag 提交：`860edf2`。
 
 ### 问题证据
 
@@ -293,6 +300,22 @@ Windows CI 兼容修复及 `v2.0.3` Tag 提交：`ce59731`。
 - ad-hoc 严格签名、主程序离屏 smoke、ZIP `unzip -t` 和 DMG `hdiutil verify`
   均通过；临时构建目录已物理删除。
 
+### 线上发布验证
+
+- 首次 `main` 跨平台工作流 `37878223733` 仅因 Windows 临时目录短路径
+  `RUNNER~1` 与规范长路径的字符串断言不同而失败，产品测试均通过；修正测试后再发布。
+- 修正后的 `main` 跨平台工作流 `37878452292`：Windows、macOS、Ubuntu 全部成功。
+- `v2.1.1` 跨平台工作流 `37878559217`：Windows、macOS、Ubuntu 全部成功。
+- `v2.1.1` 打包发布工作流 `37878559248`：Windows、macOS 打包及 Release 发布成功；
+  macOS 作业包含新增的冻结主程序 coach 路径 smoke test。
+- Release 包含 8 个预期资产，在线 macOS manifest 确认版本为 `2.1.1`、提交为
+  `860edf210347ec3a64f1cba96fd2160d7672d3d2`、平台为 `macos-arm64`。
+- 在线 SHA256：
+  - ZIP：`4c4f4bcc74a274af64ec501ce715b47a012298ffd2d7781189f21c612d6ea67e`
+  - DMG：`7fdeffe709455393a0548f354e70430aa33a2c68e338496682025ab48c8aadcc`
+- 已下载线上 macOS ZIP 并通过发布 SHA256、`unzip -t`、ad-hoc 严格签名及
+  `--botmux-coach-smoke-test`；包内 helper 存在且可执行，临时下载文件已物理删除。
+
 ## 已实现的 2.0 架构
 
 - `Seele.py`：PyQt 桌宠、托盘菜单、气泡和 Botmux 状态展示。
@@ -327,7 +350,7 @@ git diff --check
 
 ## 后续待验收
 
-1. 在全新字节 Apple Silicon 电脑验证 `v2.1.0` 完整安装和失败续跑。
+1. 在全新字节 Apple Silicon 电脑验证 `v2.1.1` 完整安装和失败续跑。
 2. 验证 Trae、Lark CLI、AgentBuddy 的真实首次登录和自动续跑。
 3. 验证 Botmux 扫码、语音提示、`traex` 自动选择和默认目录自动确认。
 4. 普通公网 macOS 版本、Developer ID 签名和公证仍未完成。
@@ -337,5 +360,5 @@ git diff --check
 1. 先阅读本文件和 `.trae/skills/seele-botmux/SKILL.md`。
 2. 运行 `git status --short --branch`，保护所有本地未提交修改。
 3. 不以远端 Release 安装包覆盖当前工作区的未提交修改。
-4. 按“后续待验收”在全新字节 Apple Silicon 电脑验证 `v2.1.0`，不要重复创建
+4. 按“后续待验收”在全新字节 Apple Silicon 电脑验证 `v2.1.1`，不要重复创建
    Tag 或发布安装包。
