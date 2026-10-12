@@ -14,6 +14,7 @@
 
 - 仓库：`https://github.com/xinna2001/Seele`
 - 当前分支：`main`
+- `v2.2.0` 发布提交：`6261e72`
 - `v2.1.1` 发布提交：`860edf2`
 - `v2.1.0` 发布提交：`1c64d7c`
 - `v2.0.3` 正式测试发布提交：`ce59731`
@@ -22,8 +23,10 @@
 - `v2.0.1` 发布提交：`a552425`
 - `v2.0.0` 发布基线提交：`8588a7d`
 - `v1.0.0`：提交 `0619912`
-- GitHub 已存在 `v1.0.0`、`v2.0.0`、`v2.0.1`、`v2.0.3`、`v2.1.0`
-  和 `v2.1.1` Release。
+- GitHub 已存在 `v1.0.0`、`v2.0.0`、`v2.0.1`、`v2.0.3`、`v2.1.0`、
+  `v2.1.1` 和 `v2.2.0` Release。
+- `v2.2.0` Release：
+  `https://github.com/xinna2001/Seele/releases/tag/v2.2.0`。
 - `v2.1.1` Release：
   `https://github.com/xinna2001/Seele/releases/tag/v2.1.1`。
 - `v2.1.0` Release：
@@ -318,8 +321,11 @@ Windows CI 兼容修复及 `v2.0.3` Tag 提交：`ce59731`。
 
 ## 2026-10-12 v2.2.0 登录注意力引导
 
-状态：用户已要求合并虚影和浏览器自动打开功能后直接发布 GitHub `v2.2.0`。
+状态：已合并 `main` 并发布 `v2.2.0`，本地和线上包验证通过。
 分支：`feat/mac-byte-login-attention-v2.2.0`。
+功能提交：`f04d832`。
+合并提交：`ddea7d7`。
+跨平台测试修复及 Tag 提交：`6261e72`。
 
 ### 产品决策
 
@@ -366,7 +372,22 @@ Windows CI 兼容修复及 `v2.0.3` Tag 提交：`ce59731`。
   smoke、coach 路径、ZIP 和 DMG 验证全部通过。
 - 最终 VIP ZIP SHA256：
   `b5c69e3f49e06e7425108576bbff86bc59aebb528ea05b5f78701e2feda8d34a`。
-- 准备提交并发布 `v2.2.0`。
+
+### 线上发布验证
+
+- 首次 `main` 跨平台工作流 `38235322667` 仅因轻量测试环境未安装 PyQt5，新增
+  渲染测试导入失败；产品代码和本地打包测试均通过。渲染测试改为 PyQt5 可用时运行。
+- 修正后的 `main` 跨平台工作流 `38235671299`：Windows、macOS、Ubuntu 全部成功。
+- `v2.2.0` 跨平台工作流 `38235832869`：Windows、macOS、Ubuntu 全部成功。
+- `v2.2.0` 打包发布工作流 `38235833247`：Windows、macOS 打包及 Release 发布成功；
+  macOS 作业安装完整 GUI 依赖并执行透明帧回归。
+- Release 包含 8 个预期资产，在线 macOS manifest 确认版本为 `2.2.0`、提交为
+  `6261e727e5fb98b81d380f66f24c888b084af297`、平台为 `macos-arm64`。
+- 在线 SHA256：
+  - ZIP：`3d1e78b4fb6d699b2c8932391cc47ec21e9277fd3ca7b10c59305fbe1bf39b07`
+  - DMG：`1348bef99722c4c6350cbc30728cb16099890fba2424395583eed1c9ba87efb4`
+- 已下载线上 macOS ZIP 并通过发布 SHA256、`unzip -t`、ad-hoc 严格签名、主程序
+  smoke 和 coach 路径 smoke；包内版本为 `2.2.0`，helper 存在且可执行。
 
 ## 已实现的 2.0 架构
 
@@ -402,7 +423,7 @@ git diff --check
 
 ## 后续待验收
 
-1. 在全新字节 Apple Silicon 电脑验证 `v2.1.1` 完整安装和失败续跑。
+1. 在全新字节 Apple Silicon 电脑验证 `v2.2.0` 完整安装和失败续跑。
 2. 验证 Trae、Lark CLI、AgentBuddy 的真实首次登录和自动续跑。
 3. 验证 Botmux 扫码、语音提示、`traex` 自动选择和默认目录自动确认。
 4. 普通公网 macOS 版本、Developer ID 签名和公证仍未完成。
@@ -412,5 +433,5 @@ git diff --check
 1. 先阅读本文件和 `.trae/skills/seele-botmux/SKILL.md`。
 2. 运行 `git status --short --branch`，保护所有本地未提交修改。
 3. 不以远端 Release 安装包覆盖当前工作区的未提交修改。
-4. 按“后续待验收”在全新字节 Apple Silicon 电脑验证 `v2.1.1`，不要重复创建
+4. 按“后续待验收”在全新字节 Apple Silicon 电脑验证 `v2.2.0`，不要重复创建
    Tag 或发布安装包。
