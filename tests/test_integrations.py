@@ -1,4 +1,5 @@
 import json
+import importlib.util
 import os
 import sys
 import tempfile
@@ -528,7 +529,10 @@ class PlatformPathTests(unittest.TestCase):
             self.assertNotIn(str((frameworks / "bin").resolve()), command)
 
 
-@unittest.skipUnless(sys.platform == "darwin", "macOS translucent rendering test")
+@unittest.skipUnless(
+    sys.platform == "darwin" and importlib.util.find_spec("PyQt5") is not None,
+    "macOS translucent rendering test requires PyQt5",
+)
 class MacByteRenderingTests(unittest.TestCase):
     def test_movie_label_replaces_transparent_pixels_between_frames(self):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
