@@ -25,7 +25,7 @@ import rpa_bridge
 import rpa_service
 from platform_utils import get_base_dir as _platform_base_dir, open_external
 from PyQt5.QtCore import Qt, QSize, QPoint, QObject, pyqtSignal
-from PyQt5.QtGui import QIcon, QFontMetrics
+from PyQt5.QtGui import QColor, QFontMetrics, QIcon, QPainter
 from PyQt5.QtCore import QRectF
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtGui import QRegion
@@ -177,6 +177,36 @@ class _SpeechBubble(QWidget):
         # Show without stealing focus from the desktop pet.
         self.show()
 
+
+class _TransparentMovieLabel(QWidget):
+    """Replace the full alpha surface on every frame to avoid compositor trails."""
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._pixmap = QPixmap()
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.setAutoFillBackground(False)
+
+    def setPixmap(self, pixmap: QPixmap) -> None:
+        self._pixmap = QPixmap(pixmap)
+        self.update()
+
+    def pixmap(self) -> QPixmap:
+        return QPixmap(self._pixmap)
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setCompositionMode(QPainter.CompositionMode_Source)
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 0))
+        if not self._pixmap.isNull():
+            logical_width = self._pixmap.width() / self._pixmap.devicePixelRatio()
+            logical_height = self._pixmap.height() / self._pixmap.devicePixelRatio()
+            x = round((self.width() - logical_width) / 2)
+            y = round((self.height() - logical_height) / 2)
+            painter.drawPixmap(x, y, self._pixmap)
+        painter.end()
+
+
 class DesktopWife(QWidget):
     """
     Main Window
@@ -268,8 +298,7 @@ class DesktopWife(QWidget):
             self.setAttribute(Qt.WA_MacAlwaysShowToolWindow, True)
 
         # 创建显示 GIF 的标签
-        self.PlayLabel = QLabel(self)
-        self.PlayLabel.setAlignment(Qt.AlignCenter)
+        self.PlayLabel = _TransparentMovieLabel(self)
         self.WindowSize = QDesktopWidget().screenGeometry()
 
         self.setWindowTitle("DesktopWife")

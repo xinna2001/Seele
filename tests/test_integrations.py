@@ -308,6 +308,67 @@ class MacByteBootstrapTests(unittest.TestCase):
         )
         self.assertIn("agentbuddy status --json", script)
         self.assertIn("--botmux-setup-coach", script)
+        self.assertEqual(script.count("--login-command --"), 4)
+        self.assertIn(
+            "--login-command -- traex login --sso-device",
+            script,
+        )
+        self.assertIn(
+            "--login-command -- lark-cli config init --new",
+            script,
+        )
+        self.assertIn(
+            "--login-command -- lark-cli auth login --recommend",
+            script,
+        )
+        self.assertIn(
+            "--login-command -- agentbuddy login --region cn",
+            script,
+        )
+        self.assertIn(
+            "output volume of (get volume settings)",
+            script,
+        )
+        self.assertIn(
+            "output muted of (get volume settings)",
+            script,
+        )
+        self.assertIn(
+            "set volume output volume 20 without output muted",
+            script,
+        )
+        self.assertIn(
+            'tell application "Terminal" to activate',
+            script,
+        )
+        self.assertIn("printf '\\033[2J\\033[3J\\033[H'", script)
+        self.assertIn("restore_login_audio", script)
+        finish_body = script[
+            script.index("finish() {"):script.index("trap finish EXIT")
+        ]
+        self.assertIn("restore_login_audio", finish_body)
+        for stage_name in (
+            "Trae CLI 登录",
+            "Lark CLI 应用初始化",
+            "Lark CLI 用户授权",
+            "AgentBuddy 登录",
+            "Botmux 机器人配置",
+        ):
+            self.assertIn(f"prepare_login_attention '{stage_name}'", script)
+        self.assertLess(
+            script.index("prepare_login_attention 'Trae CLI 登录'"),
+            script.index("traex login --sso-device"),
+        )
+        botmux_setup_lines = [
+            line
+            for line in script.splitlines()
+            if "--botmux-setup-coach" in line and "--login-command" not in line
+        ]
+        self.assertEqual(len(botmux_setup_lines), 1)
+        self.assertLess(
+            script.index("prepare_login_attention 'Botmux 机器人配置'"),
+            script.rindex(botmux_setup_lines[0]),
+        )
         self.assertNotIn("npm config set registry", script)
         self.assertNotIn("\ntraex\n", script)
         self.assertNotIn("\nbotmux setup\n", script)
@@ -332,6 +393,18 @@ class MacByteBootstrapTests(unittest.TestCase):
                 check=False,
             )
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_setup_script_prepares_attention_before_botmux(self):
+        script = mac_byte_bootstrap.build_bootstrap_script(
+            "setup",
+            script_path=Path("/tmp/bootstrap.command"),
+            lock_path=Path("/tmp/bootstrap.lock"),
+            status_path=Path("/tmp/bootstrap-status.json"),
+        )
+        attention = script.index("prepare_login_attention 'Botmux 机器人配置'")
+        coach = script.index("--botmux-setup-coach")
+        self.assertLess(attention, coach)
+        self.assertNotIn("prepare_login_attention 'Trae CLI 登录'", script)
 
     @unittest.skipUnless(sys.platform == "darwin", "macOS bundle path test")
     def test_frozen_bootstrap_uses_console_coach_helper(self):
@@ -364,6 +437,29 @@ class MacByteBootstrapTests(unittest.TestCase):
                 return_value=helper,
             ):
                 self.assertEqual(run_exe._run_botmux_coach_smoke_test(), 0)
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS bundle path test")
+    def test_frozen_login_command_uses_console_helper(self):
+        resources = Path("/Applications/Seele.app/Contents/Resources")
+        with (
+            patch.object(mac_byte_bootstrap.sys, "frozen", True, create=True),
+            patch.object(
+                mac_byte_bootstrap,
+                "app_path",
+                side_effect=lambda *parts: resources.joinpath(*parts),
+            ),
+        ):
+            command = mac_byte_bootstrap._login_command(
+                "traex",
+                "login",
+                "--sso-device",
+            )
+
+        self.assertIn(
+            "/Applications/Seele.app/Contents/Resources/bin/SeeleBotmuxCoach",
+            command,
+        )
+        self.assertIn("--login-command -- traex login --sso-device", command)
 
     def test_botmux_configuration_requires_a_nonempty_catalog(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -430,6 +526,43 @@ class PlatformPathTests(unittest.TestCase):
 
             self.assertIn(str(helper.resolve()), command)
             self.assertNotIn(str((frameworks / "bin").resolve()), command)
+
+
+@unittest.skipUnless(sys.platform == "darwin", "macOS translucent rendering test")
+class MacByteRenderingTests(unittest.TestCase):
+    def test_movie_label_replaces_transparent_pixels_between_frames(self):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PyQt5.QtCore import Qt
+        from PyQt5.QtGui import QColor, QImage, QPainter, QPixmap
+        from PyQt5.QtWidgets import QApplication
+        import Seele
+
+        app = QApplication.instance() or QApplication([])
+        label = Seele._TransparentMovieLabel()
+        label.resize(24, 24)
+
+        first = QPixmap(24, 24)
+        first.fill(Qt.transparent)
+        painter = QPainter(first)
+        painter.fillRect(0, 0, 10, 24, QColor(255, 0, 0, 255))
+        painter.end()
+
+        second = QPixmap(24, 24)
+        second.fill(Qt.transparent)
+        painter = QPainter(second)
+        painter.fillRect(14, 0, 10, 24, QColor(0, 0, 255, 255))
+        painter.end()
+
+        surface = QImage(24, 24, QImage.Format_ARGB32_Premultiplied)
+        surface.fill(Qt.transparent)
+        label.setPixmap(first)
+        label.render(surface)
+        label.setPixmap(second)
+        label.render(surface)
+        app.processEvents()
+
+        self.assertEqual(QColor.fromRgba(surface.pixel(2, 12)).alpha(), 0)
+        self.assertGreater(QColor.fromRgba(surface.pixel(20, 12)).alpha(), 0)
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
+from urllib.parse import urlsplit
 
 from platform_utils import app_path
 
@@ -98,10 +99,85 @@ BOTMUX_VOICE_FILES = {cue.key: cue.filename for cue in VOICE_CUES}
 _ANSI_ESCAPE_RE = re.compile(
     r"(?:\x1B\][^\x07]*(?:\x07|\x1B\\)|\x1B[@-_][0-?]*[ -/]*[@-~])"
 )
+_HTTPS_URL_RE = re.compile(r"https://[^\s\"'<>]+")
 
 
 def strip_terminal_control(text: str) -> str:
     return _ANSI_ESCAPE_RE.sub("", text).replace("\r", "")
+
+
+def _normalize_login_url(candidate: str) -> str | None:
+    value = candidate.replace("\\/", "/").rstrip(".,;:!?)]}")
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return None
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        return None
+    return value
+
+
+def open_login_url(url: str) -> bool:
+    commands = [
+        ["/usr/bin/open", "-a", "Google Chrome", url],
+        ["/usr/bin/open", url],
+    ]
+    for command in commands:
+        try:
+            result = subprocess.run(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=8,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if result.returncode == 0:
+            return True
+    return False
+
+
+class LoginUrlCoach:
+    """Open the first HTTPS login URL emitted by one trusted CLI command."""
+
+    def __init__(self, opener: Callable[[str], bool] | None = None):
+        self._decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        self._pending = ""
+        self._opened = False
+        self._opener = opener or open_login_url
+
+    def feed(self, data: bytes) -> list[bytes]:
+        decoded = self._decoder.decode(data).replace("\r\n", "\n").replace("\r", "\n")
+        cleaned = _ANSI_ESCAPE_RE.sub("", decoded).replace("\\/", "/")
+        self._pending = (self._pending + cleaned)[-24000:]
+        lines = self._pending.split("\n")
+        self._pending = lines.pop()
+        if self._opened:
+            return []
+        for line in lines:
+            for candidate in _HTTPS_URL_RE.findall(line):
+                url = _normalize_login_url(candidate)
+                if url and self._opener(url):
+                    self._opened = True
+                    return []
+        return []
+
+
+class CompositeCoach:
+    def __init__(self, *coaches):
+        self._coaches = coaches
+
+    def feed(self, data: bytes) -> list[bytes]:
+        actions: list[bytes] = []
+        for coach in self._coaches:
+            actions.extend(coach.feed(data))
+        return actions
 
 
 class PromptCoach:
@@ -309,7 +385,15 @@ def run_coached_command(
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = list(argv or ())
-    if args:
+    login_command = bool(args and args[0] == "--login-command")
+    if login_command:
+        args = args[1:]
+        if args and args[0] == "--":
+            args = args[1:]
+        if not args:
+            raise RuntimeError("登录命令不能为空")
+        command = args
+    elif args:
         command = args
     else:
         botmux = shutil.which("botmux")
@@ -319,7 +403,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     player = VoicePlayer()
     try:
-        return run_coached_command(command, coach=PromptCoach(player.play))
+        if login_command:
+            coach = LoginUrlCoach()
+        else:
+            coach = CompositeCoach(PromptCoach(player.play), LoginUrlCoach())
+        return run_coached_command(command, coach=coach)
     finally:
         player.stop()
 

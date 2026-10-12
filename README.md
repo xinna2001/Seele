@@ -68,6 +68,9 @@ Linux 还需由系统包管理器安装 Qt/XCB、PortAudio 和 Tk。Wayland、ma
 - 安装脚本要求字节内网；Botmux 固定从 npm 官方源获取 `latest`，不锁定具体版本；
 - Trae、Lark CLI、AgentBuddy 和 Botmux 登录均在 Terminal 中完成，链接和二维码不会被桌面窗口遮挡；
 - Trae、Lark CLI 和 AgentBuddy 使用官方登录命令，授权成功并通过状态校验后自动进入下一阶段；
+- 每个实际需要扫码或授权的阶段都会把 Terminal 激活到前台，并清空旧屏幕和滚动记录，只展示当前步骤；
+- 提示音播放前检测 macOS 输出音量；静音或低于 `20%` 时临时调整到 `20%`，流程退出后恢复原设置；
+- 登录命令输出 HTTPS 授权地址后自动优先使用 Google Chrome 打开，Chrome 不可用时回退系统默认浏览器；
 - Lark CLI 应用初始化每轮最多执行一次；网页流程结束后独立读取本机配置，未落盘时停止并提示重启 Seele 续跑，避免同轮重复创建应用；
 - Botmux 保留需要用户决定的原生 setup 选项，希儿按当前提示播放对应语音；
 - 固定的 CLI 适配器和工作目录选项自动选择 `traex` 与 Botmux 默认值；

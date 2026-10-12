@@ -147,26 +147,41 @@ hash -r
 """.strip()
 
 
+def _shell_login_attention(stage_name: str) -> str:
+    return f"prepare_login_attention {shlex.quote(stage_name)}"
+
+
 def _botmux_coach_helper_path() -> Path:
     return app_path("bin", "SeeleBotmuxCoach")
 
 
-def _botmux_coach_command() -> str:
+def _coach_helper_base_command() -> list[str]:
     if getattr(sys, "frozen", False):
         resources = app_path()
         helper = _botmux_coach_helper_path()
-        command = [
+        return [
             "/usr/bin/env",
             f"SEELE_RESOURCES_DIR={resources}",
             str(helper),
         ]
-    else:
-        command = [
-            sys.executable,
-            str(Path(__file__).with_name("run_exe.py")),
-            "--botmux-setup-coach",
-        ]
-    return shlex.join(command)
+    return [
+        sys.executable,
+        str(Path(__file__).with_name("run_exe.py")),
+        "--botmux-setup-coach",
+    ]
+
+
+def _botmux_coach_command() -> str:
+    return shlex.join(_coach_helper_base_command())
+
+
+def _login_command(*command: str) -> str:
+    return shlex.join([
+        *_coach_helper_base_command(),
+        "--login-command",
+        "--",
+        *command,
+    ])
 
 
 def _full_install_commands() -> str:
@@ -236,15 +251,17 @@ printf '\\n安装完成，开始逐项登录。\\n'
 
 traex backend cn
 if ! traex login status >/dev/null 2>&1; then
+  {_shell_login_attention("Trae CLI 登录")}
   {_shell_voice("traex_login", "请登录 Trae CLI，并查看终端中的登录链接")}
-  traex login --sso-device
+  {_login_command("traex", "login", "--sso-device")}
 fi
 traex login status
 
 if ! lark-cli config show >/dev/null 2>&1; then
+  {_shell_login_attention("Lark CLI 应用初始化")}
   {_shell_voice("lark_config", "请初始化飞书 CLI 应用，并在浏览器完成配置")}
   lark_config_init_code=0
-  lark-cli config init --new --lang zh_cn --name seele || lark_config_init_code=$?
+  {_login_command("lark-cli", "config", "init", "--new", "--lang", "zh_cn", "--name", "seele")} || lark_config_init_code=$?
   if lark-cli config show >/dev/null 2>&1; then
     printf '\\n已在本机检测到飞书 CLI 应用配置。\\n'
   else
@@ -259,17 +276,20 @@ if ! lark-cli config show >/dev/null 2>&1; then
 fi
 
 if ! lark-cli auth status --json --verify >/dev/null 2>&1; then
+  {_shell_login_attention("Lark CLI 用户授权")}
   {_shell_voice("lark_login", "请登录飞书 CLI，并在浏览器完成权限授权")}
-  lark-cli auth login --recommend
+  {_login_command("lark-cli", "auth", "login", "--recommend")}
 fi
 lark-cli auth status --json --verify
 
 if ! agentbuddy status --json >/dev/null 2>&1; then
+  {_shell_login_attention("AgentBuddy 登录")}
   {_shell_voice("agentbuddy_login", "请登录 Skill 空间，并查看终端中的登录链接")}
-  agentbuddy login --region cn --login-mode device --json --yes
+  {_login_command("agentbuddy", "login", "--region", "cn", "--login-mode", "device", "--json", "--yes")}
 fi
 agentbuddy status --json
 
+{_shell_login_attention("Botmux 机器人配置")}
 {_shell_voice("botmux_setup", "请扫描终端二维码，完成 Botmux 机器人配置")}
 {_botmux_coach_command()}
 """.strip()
@@ -278,6 +298,7 @@ agentbuddy status --json
 def _setup_only_commands() -> str:
     return f"""
 {_npm_prelude()}
+{_shell_login_attention("Botmux 机器人配置")}
 {_shell_voice("botmux_setup", "请扫描终端二维码，完成 Botmux 机器人配置")}
 {_botmux_coach_command()}
 """.strip()
@@ -312,9 +333,70 @@ SCRIPT_FILE={shlex.quote(str(script_path))}
 LOCK_FILE={shlex.quote(str(lock_path))}
 STATUS_FILE={shlex.quote(str(status_path))}
 TMP_STATUS="${{STATUS_FILE}}.tmp.$$"
+ORIGINAL_OUTPUT_VOLUME=""
+ORIGINAL_OUTPUT_MUTED=""
+LOGIN_AUDIO_SNAPSHOT_TAKEN=0
+LOGIN_AUDIO_ADJUSTED=0
+
+remember_login_audio() {{
+  if [ "$LOGIN_AUDIO_SNAPSHOT_TAKEN" -eq 1 ]; then
+    return
+  fi
+  saved_volume="$(/usr/bin/osascript -e 'output volume of (get volume settings)' 2>/dev/null || true)"
+  saved_muted="$(/usr/bin/osascript -e 'output muted of (get volume settings)' 2>/dev/null || true)"
+  case "$saved_volume" in
+    ""|*[!0-9]*) return ;;
+  esac
+  case "$saved_muted" in
+    true|false) ;;
+    *) return ;;
+  esac
+  ORIGINAL_OUTPUT_VOLUME="$saved_volume"
+  ORIGINAL_OUTPUT_MUTED="$saved_muted"
+  LOGIN_AUDIO_SNAPSHOT_TAKEN=1
+}}
+
+ensure_login_audio() {{
+  remember_login_audio
+  current_volume="$(/usr/bin/osascript -e 'output volume of (get volume settings)' 2>/dev/null || true)"
+  current_muted="$(/usr/bin/osascript -e 'output muted of (get volume settings)' 2>/dev/null || true)"
+  case "$current_volume" in
+    ""|*[!0-9]*) return ;;
+  esac
+  if [ "$current_muted" = "true" ] || [ "$current_volume" -lt 20 ]; then
+    if /usr/bin/osascript -e 'set volume output volume 20 without output muted' >/dev/null 2>&1; then
+      LOGIN_AUDIO_ADJUSTED=1
+    fi
+  fi
+}}
+
+restore_login_audio() {{
+  if [ "$LOGIN_AUDIO_ADJUSTED" -ne 1 ] || [ "$LOGIN_AUDIO_SNAPSHOT_TAKEN" -ne 1 ]; then
+    return
+  fi
+  if [ "$ORIGINAL_OUTPUT_MUTED" = "true" ]; then
+    /usr/bin/osascript \
+      -e "set volume output volume ${{ORIGINAL_OUTPUT_VOLUME}} with output muted" \
+      >/dev/null 2>&1 || true
+  else
+    /usr/bin/osascript \
+      -e "set volume output volume ${{ORIGINAL_OUTPUT_VOLUME}} without output muted" \
+      >/dev/null 2>&1 || true
+  fi
+}}
+
+prepare_login_attention() {{
+  stage_name="$1"
+  ensure_login_audio
+  /usr/bin/osascript -e 'tell application "Terminal" to activate' >/dev/null 2>&1 || true
+  printf '\\033[2J\\033[3J\\033[H'
+  printf '\\nSeele {version} 登录引导 - %s\\n' "$stage_name"
+  printf '请完成当前页面显示的扫码或授权步骤。\\n\\n'
+}}
 
 finish() {{
   code=$?
+  restore_login_audio
   finished_at="$(date +%s)"
   if [ "$code" -eq 0 ]; then
     printf '{{"state":"completed","code":0,"updated_at":%s}}\\n' "$finished_at" > "$TMP_STATUS"
