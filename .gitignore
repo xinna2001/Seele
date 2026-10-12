@@ -139,3 +139,4 @@ botmux_config.json
 botmux-skill/dist/
 botmux-skill/config.json
 .DS_Store
+vip-packages/

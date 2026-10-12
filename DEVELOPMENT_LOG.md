@@ -316,6 +316,58 @@ Windows CI 兼容修复及 `v2.0.3` Tag 提交：`ce59731`。
 - 已下载线上 macOS ZIP 并通过发布 SHA256、`unzip -t`、ad-hoc 严格签名及
   `--botmux-coach-smoke-test`；包内 helper 存在且可执行，临时下载文件已物理删除。
 
+## 2026-10-12 v2.2.0 登录注意力引导
+
+状态：用户已要求合并虚影和浏览器自动打开功能后直接发布 GitHub `v2.2.0`。
+分支：`feat/mac-byte-login-attention-v2.2.0`。
+
+### 产品决策
+
+1. 不重开 Terminal。重开只会保留旧窗口或再次生成新的登录信息，增加用户误点旧链接
+   的概率。
+2. 每个实际需要扫码或授权的阶段开始前，把现有 Terminal 激活到前台，并同时清空
+   当前屏幕和滚动历史，只展示当前阶段标题、链接或二维码。
+3. 不实现永久“始终置顶”。持续置顶会遮挡浏览器授权页面，也可能需要额外辅助功能
+   权限；阶段开始时重新激活即可满足提醒需求。
+4. 提示音播放前读取 macOS 输出音量与静音状态。静音或低于 `20%` 时临时设为
+   `20%` 并取消静音，脚本退出时恢复用户原设置。
+5. 已完成并被状态命令跳过的登录阶段不激活窗口、不清屏、不调整音量。
+6. Trae、Lark CLI、AgentBuddy 和 Botmux 的登录输出由 PTY helper 监听；检测到
+   当前命令首个完整 HTTPS 登录地址后优先用 Google Chrome 打开，失败时回退默认浏览器。
+7. 桌宠透明 GIF 不再依赖 QLabel 的增量合成；每帧先用
+   `CompositionMode_Source` 清空整块 alpha 画布，再绘制当前帧，避免低配机器残留虚影。
+
+### 实现范围
+
+- Trae CLI 登录。
+- Lark CLI 应用初始化。
+- Lark CLI 用户 OAuth。
+- AgentBuddy 登录。
+- Botmux 原生 setup。
+- 完整安装与仅 Botmux 配置两种路径。
+
+### 本地验证
+
+- Python `compileall`：通过。
+- Python 单元测试：32 项通过。
+- Botmux 插件 build、validate 和 MCP smoke：通过。
+- AppleScript 音量、静音和 Terminal 激活语句通过 `osacompile` 编译检查。
+- 使用假的系统音量接口验证：原始静音且音量为 0 时，登录前设为 20 并取消静音，
+  Terminal 激活后，退出时恢复音量 0 和静音。
+- 本地 Apple Silicon `.app` 构建、ad-hoc 严格签名、主程序离屏 smoke、coach
+  路径 smoke 和 ZIP 完整性检查通过。
+- 透明帧回归测试在同一画布连续绘制两个互斥区域，确认第二帧透明区域 alpha 为 0，
+  第一帧像素不会残留。
+- 登录 URL 回归覆盖分段 JSON 输出、每命令只打开一次、拒绝非 HTTPS/含凭据 URL、
+  Google Chrome 优先和默认浏览器回退。
+- VIP 测试包：
+  `vip-packages/Seele-2.2.0-vip-test-mac_byte-macos-arm64.zip`。
+- 包含本轮全部改动的最终本地 Apple Silicon ZIP 与 DMG 已重新构建；签名、主程序
+  smoke、coach 路径、ZIP 和 DMG 验证全部通过。
+- 最终 VIP ZIP SHA256：
+  `b5c69e3f49e06e7425108576bbff86bc59aebb528ea05b5f78701e2feda8d34a`。
+- 准备提交并发布 `v2.2.0`。
+
 ## 已实现的 2.0 架构
 
 - `Seele.py`：PyQt 桌宠、托盘菜单、气泡和 Botmux 状态展示。

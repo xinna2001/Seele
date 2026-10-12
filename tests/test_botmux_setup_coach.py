@@ -1,11 +1,63 @@
 import os
 import sys
 import unittest
+from unittest.mock import patch
 
 import botmux_setup_coach
 
 
 class PromptCoachTests(unittest.TestCase):
+    def test_login_url_coach_opens_split_json_url_once(self):
+        opened = []
+        coach = botmux_setup_coach.LoginUrlCoach(
+            lambda url: opened.append(url) or True
+        )
+
+        coach.feed(b'{"login_url":"https:\\/\\/skills.bytedance.')
+        coach.feed(b'net\\/auth?session=abc&region=cn"}\n')
+        coach.feed(b'https://skills.bytedance.net/auth?session=another\n')
+
+        self.assertEqual(
+            opened,
+            ["https://skills.bytedance.net/auth?session=abc&region=cn"],
+        )
+
+    def test_login_url_coach_rejects_non_https_and_credentials(self):
+        opened = []
+        coach = botmux_setup_coach.LoginUrlCoach(
+            lambda url: opened.append(url) or True
+        )
+
+        coach.feed(b"http://example.com https://user:pass@example.com/path\n")
+
+        self.assertEqual(opened, [])
+
+    def test_browser_open_prefers_google_chrome_then_default(self):
+        completed = type("Completed", (), {"returncode": 1})
+        succeeded = type("Completed", (), {"returncode": 0})
+        with patch.object(
+            botmux_setup_coach.subprocess,
+            "run",
+            side_effect=[completed(), succeeded()],
+        ) as run:
+            self.assertTrue(
+                botmux_setup_coach.open_login_url("https://example.com/login")
+            )
+
+        self.assertEqual(
+            run.call_args_list[0].args[0],
+            [
+                "/usr/bin/open",
+                "-a",
+                "Google Chrome",
+                "https://example.com/login",
+            ],
+        )
+        self.assertEqual(
+            run.call_args_list[1].args[0],
+            ["/usr/bin/open", "https://example.com/login"],
+        )
+
     def test_voice_cues_are_deduplicated_and_do_not_answer_for_user(self):
         cues = []
         coach = botmux_setup_coach.PromptCoach(lambda cue: cues.append(cue.key))
