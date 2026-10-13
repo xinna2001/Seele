@@ -124,12 +124,18 @@ def _voice_path(name: str) -> Path:
     return app_path("audio", "mac_byte", VOICE_FILES[name])
 
 
-def _shell_voice(name: str, fallback_text: str) -> str:
+def _shell_voice(
+    name: str,
+    fallback_text: str,
+    *,
+    background: bool = False,
+) -> str:
     path = shlex.quote(str(_voice_path(name)))
     message = shlex.quote(fallback_text)
+    suffix = " &" if background else " || true"
     return f"""
 if [ -f {path} ]; then
-  /usr/bin/afplay {path} >/dev/null 2>&1 || true
+  /usr/bin/afplay {path} >/dev/null 2>&1{suffix}
 else
   printf '\\n[语音占位符] %s\\n' {message}
 fi
@@ -149,6 +155,10 @@ hash -r
 
 def _shell_login_attention(stage_name: str) -> str:
     return f"prepare_login_attention {shlex.quote(stage_name)}"
+
+
+def _shell_login_audio() -> str:
+    return "prepare_login_audio"
 
 
 def _botmux_coach_helper_path() -> Path:
@@ -251,15 +261,15 @@ printf '\\n安装完成，开始逐项登录。\\n'
 
 traex backend cn
 if ! traex login status >/dev/null 2>&1; then
-  {_shell_login_attention("Trae CLI 登录")}
-  {_shell_voice("traex_login", "请登录 Trae CLI，并查看终端中的登录链接")}
+  {_shell_login_audio()}
+  {_shell_voice("traex_login", "请登录 Trae CLI，并查看终端中的登录链接", background=True)}
   {_login_command("traex", "login", "--sso-device")}
 fi
 traex login status
 
 if ! lark-cli config show >/dev/null 2>&1; then
-  {_shell_login_attention("Lark CLI 应用初始化")}
-  {_shell_voice("lark_config", "请初始化飞书 CLI 应用，并在浏览器完成配置")}
+  {_shell_login_audio()}
+  {_shell_voice("lark_config", "请初始化飞书 CLI 应用，并在浏览器完成配置", background=True)}
   lark_config_init_code=0
   {_login_command("lark-cli", "config", "init", "--new", "--lang", "zh_cn", "--name", "seele")} || lark_config_init_code=$?
   if lark-cli config show >/dev/null 2>&1; then
@@ -276,15 +286,15 @@ if ! lark-cli config show >/dev/null 2>&1; then
 fi
 
 if ! lark-cli auth status --json --verify >/dev/null 2>&1; then
-  {_shell_login_attention("Lark CLI 用户授权")}
-  {_shell_voice("lark_login", "请登录飞书 CLI，并在浏览器完成权限授权")}
+  {_shell_login_audio()}
+  {_shell_voice("lark_login", "请登录飞书 CLI，并在浏览器完成权限授权", background=True)}
   {_login_command("lark-cli", "auth", "login", "--recommend")}
 fi
 lark-cli auth status --json --verify
 
 if ! agentbuddy status --json >/dev/null 2>&1; then
-  {_shell_login_attention("AgentBuddy 登录")}
-  {_shell_voice("agentbuddy_login", "请登录 Skill 空间，并查看终端中的登录链接")}
+  {_shell_login_audio()}
+  {_shell_voice("agentbuddy_login", "请登录 Skill 空间，并查看终端中的登录链接", background=True)}
   {_login_command("agentbuddy", "login", "--region", "cn", "--login-mode", "device", "--json", "--yes")}
 fi
 agentbuddy status --json
@@ -387,11 +397,16 @@ restore_login_audio() {{
 
 prepare_login_attention() {{
   stage_name="$1"
-  ensure_login_audio
+  prepare_login_audio
   /usr/bin/osascript -e 'tell application "Terminal" to activate' >/dev/null 2>&1 || true
   printf '\\033[2J\\033[3J\\033[H'
   printf '\\nSeele {version} 登录引导 - %s\\n' "$stage_name"
   printf '请完成当前页面显示的扫码或授权步骤。\\n\\n'
+}}
+
+prepare_login_audio() {{
+  ensure_login_audio
+  printf '\\033[2J\\033[3J\\033[H'
 }}
 
 finish() {{

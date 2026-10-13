@@ -389,6 +389,47 @@ Windows CI 兼容修复及 `v2.0.3` Tag 提交：`ce59731`。
 - 已下载线上 macOS ZIP 并通过发布 SHA256、`unzip -t`、ad-hoc 严格签名、主程序
   smoke 和 coach 路径 smoke；包内版本为 `2.2.0`，helper 存在且可执行。
 
+## 2026-10-13 v2.2.1 浏览器优先登录
+
+状态：用户已确认混合交互方案并要求完成后发布 GitHub `v2.2.1`。
+分支：`fix/login-browser-first-v2.2.1`。
+
+### 产品决策
+
+1. Trae、Lark CLI 和 AgentBuddy 登录不再主动前置 Terminal；旧记录在后台清理。
+2. 登录提示音改为后台播放，官方登录命令立即启动；链接出现后 Chrome 自动到前台，
+   用户可以边听语音边完成浏览器授权。
+3. 链接 5 秒内未出现或命令失败时，PTY helper 才激活 Terminal；不在此时二次清屏，
+   当前二维码、错误信息和手动恢复入口保持可见。
+4. Botmux 继续在阶段开始时前置并清理 Terminal，初始语音完整播放后进入原生 setup；
+   机器人名称、管理员邮箱和菜单交互仍需要终端可见。
+5. 所有路径保留原始终端输出；浏览器优先不等于隐藏或关闭 Terminal。
+
+### 实现内容
+
+- `_shell_voice` 支持后台播放，普通登录阶段使用异步 `afplay`。
+- 安装脚本拆分 `prepare_login_audio` 与 `prepare_login_attention`；前者处理音量并
+  在后台清掉旧终端记录，后者仅供 Botmux 前置窗口和显示阶段标题。
+- `LoginUrlCoach` 增加单调时钟超时、一次性 fallback 和失败完成回调。
+- PTY 循环每 0.5 秒驱动 coach `tick()`，子进程结束后调用 `finish(exit_code)`。
+- Botmux 的 URL 监听关闭超时 fallback，避免原生交互过程中二次清屏。
+
+### 本地验证
+
+- Python `compileall`：通过。
+- Python 单元测试：36 项通过。
+- Botmux 插件 build、validate 和 MCP smoke：通过。
+- 生成脚本确认只有 Botmux 调用 `prepare_login_attention`；四个普通登录阶段均使用
+  后台 `afplay`，并在语音启动后立即运行登录命令。
+- 超时、命令失败、链接成功和 Terminal fallback 保留当前二维码均有回归覆盖。
+- AppleScript Terminal 激活语句通过 `osacompile`。
+- 本地 Apple Silicon `.app` 构建、ad-hoc 严格签名、主程序 smoke、coach 路径、
+  ZIP `unzip -t` 和 DMG `hdiutil verify` 全部通过。
+- VIP 测试包：
+  `vip-packages/Seele-2.2.1-vip-test-mac_byte-macos-arm64.zip`。
+- VIP ZIP SHA256：
+  `1f544d803727cc1cf03c94e78e4ef21d9c4a2ce83c65ab9aafa01086f228d7b7`。
+
 ## 已实现的 2.0 架构
 
 - `Seele.py`：PyQt 桌宠、托盘菜单、气泡和 Botmux 状态展示。

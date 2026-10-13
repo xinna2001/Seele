@@ -1,5 +1,13 @@
 # 更新记录
 
+## 2.2.1
+
+- Trae、Lark 和 AgentBuddy 登录阶段在后台清理旧终端记录但不主动前置 Terminal，
+  提示音改为后台播放，用户可以边听语音边在自动打开的浏览器中操作。
+- 登录链接 5 秒内未出现或登录命令失败时，才将 Terminal 切到前台；当前二维码和
+  错误信息保持可见，不再二次清屏。
+- Botmux 保留 Terminal 前置和阻塞式初始语音，因为仍需名称、邮箱和菜单交互。
+
 ## 2.2.0
 
 - Trae CLI、Lark CLI、AgentBuddy 和 Botmux 需要用户扫码或授权前，自动将 Terminal

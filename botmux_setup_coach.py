@@ -9,6 +9,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
@@ -143,14 +144,51 @@ def open_login_url(url: str) -> bool:
     return False
 
 
+def focus_terminal_for_login() -> bool:
+    try:
+        sys.stdout.write(
+            "\n未能自动打开登录网页，请在当前终端继续操作。\n\n"
+        )
+        sys.stdout.flush()
+    except OSError:
+        pass
+    try:
+        result = subprocess.run(
+            [
+                "/usr/bin/osascript",
+                "-e",
+                'tell application "Terminal" to activate',
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=8,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0
+
+
 class LoginUrlCoach:
     """Open the first HTTPS login URL emitted by one trusted CLI command."""
 
-    def __init__(self, opener: Callable[[str], bool] | None = None):
+    def __init__(
+        self,
+        opener: Callable[[str], bool] | None = None,
+        *,
+        fallback: Callable[[], bool] | None = None,
+        fallback_seconds: float | None = 5.0,
+        clock: Callable[[], float] | None = None,
+    ):
         self._decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
         self._pending = ""
         self._opened = False
+        self._fallback_shown = False
         self._opener = opener or open_login_url
+        self._fallback = fallback or focus_terminal_for_login
+        self._fallback_seconds = fallback_seconds
+        self._clock = clock or time.monotonic
+        self._started_at = self._clock()
 
     def feed(self, data: bytes) -> list[bytes]:
         decoded = self._decoder.decode(data).replace("\r\n", "\n").replace("\r", "\n")
@@ -168,6 +206,22 @@ class LoginUrlCoach:
                     return []
         return []
 
+    def tick(self) -> None:
+        if (
+            self._opened
+            or self._fallback_shown
+            or self._fallback_seconds is None
+        ):
+            return
+        if self._clock() - self._started_at >= self._fallback_seconds:
+            self._fallback_shown = True
+            self._fallback()
+
+    def finish(self, exit_code: int) -> None:
+        if exit_code != 0 and not self._opened and not self._fallback_shown:
+            self._fallback_shown = True
+            self._fallback()
+
 
 class CompositeCoach:
     def __init__(self, *coaches):
@@ -178,6 +232,18 @@ class CompositeCoach:
         for coach in self._coaches:
             actions.extend(coach.feed(data))
         return actions
+
+    def tick(self) -> None:
+        for coach in self._coaches:
+            tick = getattr(coach, "tick", None)
+            if tick:
+                tick()
+
+    def finish(self, exit_code: int) -> None:
+        for coach in self._coaches:
+            finish = getattr(coach, "finish", None)
+            if finish:
+                finish(exit_code)
 
 
 class PromptCoach:
@@ -363,10 +429,17 @@ def run_coached_command(
                         os.write(master_fd, automatic_input)
                 else:
                     break
+            tick = getattr(prompt_coach, "tick", None)
+            if tick:
+                tick()
 
         _, status = os.waitpid(child_pid, 0)
         child_reaped = True
-        return os.waitstatus_to_exitcode(status)
+        exit_code = os.waitstatus_to_exitcode(status)
+        finish = getattr(prompt_coach, "finish", None)
+        if finish:
+            finish(exit_code)
+        return exit_code
     finally:
         signal.signal(signal.SIGWINCH, previous_winch)
         termios.tcsetattr(input_fd, termios.TCSADRAIN, original_attrs)
@@ -406,7 +479,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         if login_command:
             coach = LoginUrlCoach()
         else:
-            coach = CompositeCoach(PromptCoach(player.play), LoginUrlCoach())
+            coach = CompositeCoach(
+                PromptCoach(player.play),
+                LoginUrlCoach(fallback_seconds=None),
+            )
         return run_coached_command(command, coach=coach)
     finally:
         player.stop()

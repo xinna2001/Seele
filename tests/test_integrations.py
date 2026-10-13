@@ -348,16 +348,27 @@ class MacByteBootstrapTests(unittest.TestCase):
             script.index("finish() {"):script.index("trap finish EXIT")
         ]
         self.assertIn("restore_login_audio", finish_body)
+        self.assertEqual(script.count("prepare_login_attention '"), 1)
+        self.assertIn(
+            "prepare_login_attention 'Botmux 机器人配置'",
+            script,
+        )
         for stage_name in (
             "Trae CLI 登录",
             "Lark CLI 应用初始化",
             "Lark CLI 用户授权",
             "AgentBuddy 登录",
-            "Botmux 机器人配置",
         ):
-            self.assertIn(f"prepare_login_attention '{stage_name}'", script)
+            self.assertNotIn(f"prepare_login_attention '{stage_name}'", script)
+        self.assertGreaterEqual(script.count("prepare_login_audio"), 6)
+        background_voice_lines = [
+            line
+            for line in script.splitlines()
+            if "/usr/bin/afplay" in line and line.rstrip().endswith("&")
+        ]
+        self.assertEqual(len(background_voice_lines), 4)
         self.assertLess(
-            script.index("prepare_login_attention 'Trae CLI 登录'"),
+            script.index("prepare_login_audio", script.index("traex backend cn")),
             script.index("traex login --sso-device"),
         )
         botmux_setup_lines = [
