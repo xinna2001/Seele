@@ -1,3 +1,4 @@
+import io
 import os
 import sys
 import unittest
@@ -31,6 +32,73 @@ class PromptCoachTests(unittest.TestCase):
         coach.feed(b"http://example.com https://user:pass@example.com/path\n")
 
         self.assertEqual(opened, [])
+
+    def test_login_url_coach_focuses_terminal_only_after_timeout(self):
+        now = [10.0]
+        fallbacks = []
+        coach = botmux_setup_coach.LoginUrlCoach(
+            lambda _url: True,
+            fallback=lambda: fallbacks.append("shown") or True,
+            fallback_seconds=5.0,
+            clock=lambda: now[0],
+        )
+
+        now[0] = 14.9
+        coach.tick()
+        self.assertEqual(fallbacks, [])
+        now[0] = 15.0
+        coach.tick()
+        coach.tick()
+        self.assertEqual(fallbacks, ["shown"])
+
+    def test_login_url_prevents_terminal_fallback(self):
+        now = [10.0]
+        opened = []
+        fallbacks = []
+        coach = botmux_setup_coach.LoginUrlCoach(
+            lambda url: opened.append(url) or True,
+            fallback=lambda: fallbacks.append("shown") or True,
+            fallback_seconds=5.0,
+            clock=lambda: now[0],
+        )
+
+        coach.feed(b"https://example.com/login\n")
+        now[0] = 20.0
+        coach.tick()
+        coach.finish(0)
+
+        self.assertEqual(opened, ["https://example.com/login"])
+        self.assertEqual(fallbacks, [])
+
+    def test_failed_login_command_focuses_terminal_immediately(self):
+        fallbacks = []
+        coach = botmux_setup_coach.LoginUrlCoach(
+            lambda _url: True,
+            fallback=lambda: fallbacks.append("shown") or True,
+            fallback_seconds=5.0,
+        )
+
+        coach.finish(1)
+        coach.finish(1)
+
+        self.assertEqual(fallbacks, ["shown"])
+
+    def test_terminal_fallback_preserves_current_qr_output(self):
+        succeeded = type("Completed", (), {"returncode": 0})
+        output = io.StringIO()
+        with (
+            patch.object(botmux_setup_coach.sys, "stdout", output),
+            patch.object(
+                botmux_setup_coach.subprocess,
+                "run",
+                return_value=succeeded(),
+            ) as run,
+        ):
+            self.assertTrue(botmux_setup_coach.focus_terminal_for_login())
+
+        self.assertNotIn("\033[2J", output.getvalue())
+        self.assertIn("请在当前终端继续操作", output.getvalue())
+        self.assertIn("Terminal", run.call_args.args[0][-1])
 
     def test_browser_open_prefers_google_chrome_then_default(self):
         completed = type("Completed", (), {"returncode": 1})
