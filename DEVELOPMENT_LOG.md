@@ -14,6 +14,7 @@
 
 - 仓库：`https://github.com/xinna2001/Seele`
 - 当前分支：`main`
+- `v2.2.1` 发布提交：`e9b5693`
 - `v2.2.0` 发布提交：`6261e72`
 - `v2.1.1` 发布提交：`860edf2`
 - `v2.1.0` 发布提交：`1c64d7c`
@@ -24,7 +25,9 @@
 - `v2.0.0` 发布基线提交：`8588a7d`
 - `v1.0.0`：提交 `0619912`
 - GitHub 已存在 `v1.0.0`、`v2.0.0`、`v2.0.1`、`v2.0.3`、`v2.1.0`、
-  `v2.1.1` 和 `v2.2.0` Release。
+  `v2.1.1`、`v2.2.0` 和 `v2.2.1` Release。
+- `v2.2.1` Release：
+  `https://github.com/xinna2001/Seele/releases/tag/v2.2.1`。
 - `v2.2.0` Release：
   `https://github.com/xinna2001/Seele/releases/tag/v2.2.0`。
 - `v2.1.1` Release：
@@ -391,8 +394,10 @@ Windows CI 兼容修复及 `v2.0.3` Tag 提交：`ce59731`。
 
 ## 2026-10-13 v2.2.1 浏览器优先登录
 
-状态：用户已确认混合交互方案并要求完成后发布 GitHub `v2.2.1`。
+状态：已合并 `main` 并发布 `v2.2.1`，本地和线上包验证通过。
 分支：`fix/login-browser-first-v2.2.1`。
+功能提交：`37c8ad5`。
+合并及 Tag 提交：`e9b5693`。
 
 ### 产品决策
 
@@ -430,6 +435,19 @@ Windows CI 兼容修复及 `v2.0.3` Tag 提交：`ce59731`。
 - VIP ZIP SHA256：
   `1f544d803727cc1cf03c94e78e4ef21d9c4a2ce83c65ab9aafa01086f228d7b7`。
 
+### 线上发布验证
+
+- `main` 跨平台工作流 `38361430431`：Windows、macOS、Ubuntu 全部成功。
+- `v2.2.1` 跨平台工作流 `38361605475`：Windows、macOS、Ubuntu 全部成功。
+- `v2.2.1` 打包发布工作流 `38361605533`：Windows、macOS 打包及 Release 发布成功。
+- Release 包含 8 个预期资产，在线 macOS manifest 确认版本为 `2.2.1`、提交为
+  `e9b5693687761891157013c38fa0355df6c8f5a1`、平台为 `macos-arm64`。
+- 在线 SHA256：
+  - ZIP：`df8ef2eb09133fff7149afbde1fab853c89ccdffc21e0d604da71ed6d372f048`
+  - DMG：`2cb432627dca932db1382977236ed41e4803053138b2ac477f57ddf8e9d40ff5`
+- 已下载线上 macOS ZIP 并通过发布 SHA256、`unzip -t`、ad-hoc 严格签名、主程序
+  smoke 和 coach 路径 smoke；包内版本为 `2.2.1`，helper 存在且可执行。
+
 ## 已实现的 2.0 架构
 
 - `Seele.py`：PyQt 桌宠、托盘菜单、气泡和 Botmux 状态展示。
@@ -464,7 +482,7 @@ git diff --check
 
 ## 后续待验收
 
-1. 在全新字节 Apple Silicon 电脑验证 `v2.2.0` 完整安装和失败续跑。
+1. 在全新字节 Apple Silicon 电脑验证 `v2.2.1` 完整安装和失败续跑。
 2. 验证 Trae、Lark CLI、AgentBuddy 的真实首次登录和自动续跑。
 3. 验证 Botmux 扫码、语音提示、`traex` 自动选择和默认目录自动确认。
 4. 普通公网 macOS 版本、Developer ID 签名和公证仍未完成。
@@ -474,5 +492,5 @@ git diff --check
 1. 先阅读本文件和 `.trae/skills/seele-botmux/SKILL.md`。
 2. 运行 `git status --short --branch`，保护所有本地未提交修改。
 3. 不以远端 Release 安装包覆盖当前工作区的未提交修改。
-4. 按“后续待验收”在全新字节 Apple Silicon 电脑验证 `v2.2.0`，不要重复创建
+4. 按“后续待验收”在全新字节 Apple Silicon 电脑验证 `v2.2.1`，不要重复创建
    Tag 或发布安装包。
