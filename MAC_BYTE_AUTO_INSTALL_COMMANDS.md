@@ -1,6 +1,6 @@
 # mac_byte 自动安装命令清单
 
-本文记录 Seele `main` 分支（基于 `v2.2.1`）中 `mac_byte` 首次启动实际执行的命令。权威实现位于
+本文记录 Seele `v2.2.2` 中 `mac_byte` 首次启动实际执行的命令。权威实现位于
 `mac_byte_bootstrap.py` 和 `botmux_setup_coach.py`。
 
 ## 触发模式

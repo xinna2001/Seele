@@ -450,11 +450,12 @@ Windows CI 兼容修复及 `v2.0.3` Tag 提交：`ce59731`。
 
 ## 2026-10-14 tmux 与 Homebrew 前置修复
 
-状态：实现与验证完成；PR
-[#1](https://github.com/xinna2001/Seele/pull/1) 的 Windows、macOS、Ubuntu
-跨平台 CI 均已通过，按用户要求由维护者合并，不直接推 main。
+状态：已通过 PR
+[#1](https://github.com/xinna2001/Seele/pull/1) 合并 `main`，纳入 `v2.2.2`；
+PR 及合并后的 Windows、macOS、Ubuntu 跨平台 CI 均已通过。
 分支：`fix/mac-byte-homebrew-tmux-bootstrap`。
 首个实现提交：`69dca28`。
+合并提交：`b476900`。
 共同作者：Cary Cao（GitHub `Carycmj`）。
 
 ### 问题结论
@@ -492,6 +493,21 @@ Windows CI 兼容修复及 `v2.0.3` Tag 提交：`ce59731`。
 - 本地 Apple Silicon `.app` 与 console helper 构建、ad-hoc 严格签名、主程序 smoke
   和 coach 路径 smoke：通过；临时构建目录已物理删除。
 
+### v2.2.2 发布准备
+
+- `VERSION` 和 `CHANGELOG.md` 已更新为 `2.2.2`。
+- Python 单元测试：38 项通过，包含 macOS 透明渲染回归测试。
+- Botmux 插件 build、validate 和 MCP smoke：通过。
+- Apple Silicon `.app` 与 console helper 均确认为 arm64；包内版本、plist
+  short version 和 build version 均为 `2.2.2`。
+- ad-hoc 严格签名、主程序 smoke、coach 路径 smoke、ZIP 完整性和 DMG 校验均通过。
+- VIP 测试包：
+  `vip-packages/Seele-2.2.2-vip-test-mac_byte-macos-arm64.zip`。
+- VIP ZIP SHA256：
+  `877c8f7b62aa5c721ddf9a735b360d7e1ecf267fe511385f9afd0a343eba239e`。
+- 最终 ZIP 重新解压后再次通过严格签名、主程序、coach 和 helper smoke；构建与验证
+  临时目录均已物理删除。
+
 ## 已实现的 2.0 架构
 
 - `Seele.py`：PyQt 桌宠、托盘菜单、气泡和 Botmux 状态展示。
@@ -526,7 +542,7 @@ git diff --check
 
 ## 后续待验收
 
-1. 在全新字节 Apple Silicon 电脑验证 `v2.2.1` 完整安装和失败续跑。
+1. 在全新字节 Apple Silicon 电脑验证 `v2.2.2` 完整安装和失败续跑。
 2. 验证 Trae、Lark CLI、AgentBuddy 的真实首次登录和自动续跑。
 3. 验证 Botmux 扫码、语音提示、`traex` 自动选择和默认目录自动确认。
 4. 普通公网 macOS 版本、Developer ID 签名和公证仍未完成。
@@ -536,5 +552,5 @@ git diff --check
 1. 先阅读本文件和 `.trae/skills/seele-botmux/SKILL.md`。
 2. 运行 `git status --short --branch`，保护所有本地未提交修改。
 3. 不以远端 Release 安装包覆盖当前工作区的未提交修改。
-4. 按“后续待验收”在全新字节 Apple Silicon 电脑验证 `v2.2.1`，不要重复创建
+4. 按“后续待验收”在全新字节 Apple Silicon 电脑验证 `v2.2.2`，不要重复创建
    Tag 或发布安装包。
