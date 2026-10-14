@@ -69,7 +69,20 @@ curl -fsSL https://code.byted.org/api/tos-proxy/download/traex_install.sh |
 
 安装脚本直接读取 `/dev/tty`，因此 `yes | installer` 无法可靠回答提示。
 
-### 3. Trae CLI 登录与首次配置
+### 3. Homebrew 与 tmux
+
+自动化程度：已有 Homebrew 时完全自动；首次安装 Homebrew 取决于本机权限。
+
+- Botmux 默认 daemon 使用 tmux 后端，缺少 tmux 时无法启动；
+- macOS 官方推荐通过 Homebrew 安装 tmux；
+- Homebrew 官方安装器支持 `NONINTERACTIVE=1`，但全新 Mac 没有缓存 sudo 权限时会
+  使用 `sudo -n` 并可能直接失败，因此首次安装保留官方交互式密码和确认流程；
+- Apple Silicon 默认安装到 `/opt/homebrew`，Intel 默认安装到 `/usr/local`；
+- 安装后必须执行 `brew shellenv` 并读回 `tmux -V`，不能只判断安装命令已提交；
+- 当前账号没有目标目录权限时应失败退出，不降级为静默忽略；
+- 已有 Botmux 机器人配置时，补装 tmux 后不应再次运行 `botmux setup`。
+
+### 4. Trae CLI 登录与首次配置
 
 自动化程度：除用户扫码外全部自动。
 
@@ -93,7 +106,7 @@ traex login status
 
 因此，登录后的首次 TUI 选项可以完全绕过，不需要自动按方向键或回车。
 
-### 4. Lark CLI 应用配置
+### 5. Lark CLI 应用配置
 
 自动化程度：除用户扫码/网页确认外全部自动。
 
@@ -136,7 +149,7 @@ printf '%s' "$APP_SECRET" |
 
 密钥必须通过 stdin 或系统安全存储传递，不能写进命令行、日志或仓库。
 
-### 5. Lark CLI 用户授权
+### 6. Lark CLI 用户授权
 
 自动化程度：除用户授权外全部自动。
 
@@ -160,7 +173,7 @@ lark-cli auth status --json --verify
 
 这些属于权限选择，应在 Seele 首次安装说明中一次性告知用户，不能静默扩大权限。
 
-### 6. AgentBuddy
+### 7. AgentBuddy
 
 自动化程度：除用户打开链接并授权外全部自动。
 
@@ -185,7 +198,7 @@ agentbuddy whoami
 - 未登录时 `status --json` 返回
   `{"logged_in":false,"reason":"no_valid_credentials"}`，退出码为 `1`。
 
-### 7. Botmux
+### 8. Botmux
 
 自动化程度：保留用户决策，固定选项自动完成。
 
@@ -204,7 +217,7 @@ agentbuddy whoami
 脚本化 `botmux setup add --cli traecli` 仍可用于已经明确全部字段的无人值守环境，
 但不适合本产品需要用户现场命名和确认管理员的首次安装体验。
 
-### 8. Seele Botmux 插件与启动
+### 9. Seele Botmux 插件与启动
 
 自动化程度：完全自动。
 

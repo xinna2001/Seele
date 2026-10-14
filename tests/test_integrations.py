@@ -263,7 +263,7 @@ class MacByteBootstrapTests(unittest.TestCase):
         ):
             missing = mac_byte_bootstrap.missing_bootstrap_commands()
 
-        self.assertEqual(missing, ["traex", "agentbuddy", "botmux"])
+        self.assertEqual(missing, ["tmux", "traex", "agentbuddy", "botmux"])
 
     def test_full_script_uses_official_login_commands_without_manual_pauses(self):
         script = mac_byte_bootstrap.build_bootstrap_script(
@@ -275,6 +275,15 @@ class MacByteBootstrapTests(unittest.TestCase):
         self.assertIn(
             "npm install -g botmux@latest --registry https://registry.npmjs.org/",
             script,
+        )
+        self.assertIn(mac_byte_bootstrap.HOMEBREW_INSTALL_URL, script)
+        self.assertIn('/bin/bash -c "$homebrew_installer"', script)
+        self.assertNotIn("NONINTERACTIVE=1 /bin/bash -c", script)
+        self.assertIn("HOMEBREW_NO_AUTO_UPDATE=1 brew install tmux", script)
+        self.assertIn("tmux -V", script)
+        self.assertEqual(
+            script.count("HOMEBREW_NO_AUTO_UPDATE=1 brew install tmux"),
+            1,
         )
         self.assertIn(
             "if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1",
@@ -386,6 +395,20 @@ class MacByteBootstrapTests(unittest.TestCase):
         self.assertNotIn("\nbotmux setup\n", script)
         self.assertNotIn("IFS= read -r _", script)
         self.assertIn("[语音占位符]", script)
+
+    def test_full_script_skips_botmux_setup_when_already_configured(self):
+        script = mac_byte_bootstrap.build_bootstrap_script(
+            "full",
+            script_path=Path("/tmp/bootstrap.command"),
+            lock_path=Path("/tmp/bootstrap.lock"),
+            status_path=Path("/tmp/bootstrap-status.json"),
+            botmux_configured=True,
+        )
+
+        self.assertIn("brew install tmux", script)
+        self.assertIn("Botmux 已有机器人配置，跳过重复 setup", script)
+        self.assertNotIn("prepare_login_attention 'Botmux 机器人配置'", script)
+        self.assertNotIn("mac_byte_botmux_setup_16k.wav", script)
 
     @unittest.skipUnless(sys.platform == "darwin", "requires /bin/zsh")
     def test_generated_bootstrap_script_has_valid_zsh_syntax(self):
@@ -511,6 +534,28 @@ class MacByteBootstrapTests(unittest.TestCase):
                 )
             )
             self.assertEqual(status["state"], "running")
+
+    def test_full_repair_preserves_existing_botmux_configuration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            config = home / ".botmux" / "bots.json"
+            config.parent.mkdir(parents=True)
+            config.write_text('[{"larkAppId":"cli_test"}]', encoding="utf-8")
+            with (
+                patch.object(mac_byte_bootstrap, "is_mac_byte", return_value=True),
+                patch.object(mac_byte_bootstrap.subprocess, "run") as run,
+            ):
+                run.return_value.returncode = 0
+                run.return_value.stderr = ""
+                script = mac_byte_bootstrap.launch_bootstrap(
+                    mode="full",
+                    home=home,
+                )
+
+            contents = script.read_text(encoding="utf-8")
+            self.assertIn("brew install tmux", contents)
+            self.assertIn("跳过重复 setup", contents)
+            self.assertNotIn("prepare_login_attention 'Botmux 机器人配置'", contents)
 
 
 class PlatformPathTests(unittest.TestCase):
