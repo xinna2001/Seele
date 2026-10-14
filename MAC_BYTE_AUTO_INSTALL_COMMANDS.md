@@ -8,9 +8,11 @@
 Seele 仅在 macOS 且 `EDITION=mac_byte` 时运行安装检测。启动时分别解析
 `node`、`npm`、`tmux`、`traex`、`lark-cli`、`agentbuddy` 和 `botmux`：
 
-- `full`：任一命令不存在，进入完整流程，但每个已安装组件都会独立跳过；
-- `setup`：六个命令均存在，但 `~/.botmux/bots.json` 没有有效配置；
-- `ready`：六个命令均存在且 Botmux 已配置，不打开 Terminal。
+- `full`：缺少普通工具或 Botmux 本体，进入完整流程，但每个已安装组件都会独立跳过；
+- `setup`：七个命令均存在，但 `~/.botmux/bots.json` 没有有效配置；
+- `repair`：已有有效 Botmux 配置，但只缺少 `tmux`，或全部命令已存在但 Botmux
+  supervisor 没有运行；
+- `ready`：七个命令均存在、Botmux 已配置且 supervisor 在线，不打开 Terminal。
 
 生成的 `~/.seele/mac_byte/bootstrap-<UUID>.command` 权限为 `0700`，通过
 `/usr/bin/open -a Terminal` 启动。脚本使用 `set -e`、`set -u` 和
@@ -57,6 +59,27 @@ tmux -V
 Homebrew 已存在或 `tmux` 已存在时直接跳过对应安装。全新 Mac 首次安装 Homebrew
 通常需要管理员密码和一次确认，因此保留官方交互流程，不模拟密码或回车。权限确认完成
 后脚本自动继续安装 tmux；安装失败则保留终端错误，不会启动缺少 tmux 的 Botmux daemon。
+
+## Botmux 运行恢复
+
+如果上一轮已经安装并配置好 Botmux，只因缺少 `tmux` 导致 `botmux start` 失败，
+下一次双击 Seele 会进入 `repair`，而不是重新执行完整安装。该模式只执行：
+
+```bash
+# 缺少时安装 tmux；已有时直接跳过。
+HOMEBREW_NO_AUTO_UPDATE=1 brew install tmux
+
+botmux plugin install "<APP_RESOURCES>/botmux-skill" --link
+botmux plugin enable seele
+botmux start
+botmux autostart enable
+botmux status
+botmux autostart status
+```
+
+它保留现有 `bots.json`，不重复安装 Node.js、Trae CLI、Lark CLI、AgentBuddy 或
+Botmux，不重复登录，也不进入 `botmux setup`。如果 `tmux` 已经补好但 Botmux 仍未
+启动，启动检测同样进入 `repair`，重新执行插件、启动和开机自启命令。
 
 ### CLI 工具
 
@@ -182,9 +205,9 @@ SEELE_RESOURCES_DIR="<APP_RESOURCES>" \
 - 检测到工作目录模式和目录输入后，自动回车接受 Botmux 默认值；
 - 不使用固定等待秒数，不对未知提示自动输入。
 
-仅配置模式直接从该 PTY 配置步骤开始，不重复安装或登录前三个工具。若启动检测发现
-只缺少 tmux，则进入完整修复路径；已有 `~/.botmux/bots.json` 配置时只补依赖并跳过
-重复 setup。
+仅配置模式直接从该 PTY 配置步骤开始，不重复安装或登录前三个工具。若已有有效
+`~/.botmux/bots.json` 且只缺少 tmux，或 Botmux supervisor 离线，则进入独立运行
+恢复模式，不经过 PTY 配置步骤。
 
 ## 插件、启动和读回
 

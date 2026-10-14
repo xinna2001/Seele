@@ -1,6 +1,7 @@
 import json
 import importlib.util
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -239,6 +240,15 @@ class MacByteBootstrapTests(unittest.TestCase):
             patch.object(
                 mac_byte_bootstrap,
                 "missing_bootstrap_commands",
+                return_value=["tmux"],
+            ),
+            patch.object(mac_byte_bootstrap, "botmux_is_configured", return_value=True),
+        ):
+            self.assertEqual(mac_byte_bootstrap.bootstrap_mode(), "repair")
+        with (
+            patch.object(
+                mac_byte_bootstrap,
+                "missing_bootstrap_commands",
                 return_value=[],
             ),
             patch.object(mac_byte_bootstrap, "botmux_is_configured", return_value=False),
@@ -251,8 +261,43 @@ class MacByteBootstrapTests(unittest.TestCase):
                 return_value=[],
             ),
             patch.object(mac_byte_bootstrap, "botmux_is_configured", return_value=True),
+            patch.object(mac_byte_bootstrap, "botmux_is_running", return_value=False),
+        ):
+            self.assertEqual(mac_byte_bootstrap.bootstrap_mode(), "repair")
+        with (
+            patch.object(
+                mac_byte_bootstrap,
+                "missing_bootstrap_commands",
+                return_value=[],
+            ),
+            patch.object(mac_byte_bootstrap, "botmux_is_configured", return_value=True),
+            patch.object(mac_byte_bootstrap, "botmux_is_running", return_value=True),
         ):
             self.assertEqual(mac_byte_bootstrap.bootstrap_mode(), "ready")
+
+    def test_botmux_running_requires_positive_supervisor_status(self):
+        running = subprocess.CompletedProcess(
+            ["botmux", "status"],
+            0,
+            stdout="supervisor 在线 (pid 123)\n  botmux-0 online\n",
+            stderr="",
+        )
+        stopped = subprocess.CompletedProcess(
+            ["botmux", "status"],
+            0,
+            stdout="daemon 未在运行。（用 `botmux start` 启动）\n",
+            stderr="",
+        )
+        with (
+            patch.object(mac_byte_bootstrap, "_command_path", return_value="/bin/botmux"),
+            patch.object(mac_byte_bootstrap.subprocess, "run", return_value=running),
+        ):
+            self.assertTrue(mac_byte_bootstrap.botmux_is_running())
+        with (
+            patch.object(mac_byte_bootstrap, "_command_path", return_value="/bin/botmux"),
+            patch.object(mac_byte_bootstrap.subprocess, "run", return_value=stopped),
+        ):
+            self.assertFalse(mac_byte_bootstrap.botmux_is_running())
 
     def test_bootstrap_commands_are_detected_independently(self):
         installed = {"node", "npm", "lark-cli"}
@@ -410,24 +455,132 @@ class MacByteBootstrapTests(unittest.TestCase):
         self.assertNotIn("prepare_login_attention 'Botmux 机器人配置'", script)
         self.assertNotIn("mac_byte_botmux_setup_16k.wav", script)
 
-    @unittest.skipUnless(sys.platform == "darwin", "requires /bin/zsh")
-    def test_generated_bootstrap_script_has_valid_zsh_syntax(self):
+    def test_repair_script_only_repairs_tmux_and_botmux_runtime(self):
         script = mac_byte_bootstrap.build_bootstrap_script(
-            "full",
+            "repair",
             script_path=Path("/tmp/bootstrap.command"),
             lock_path=Path("/tmp/bootstrap.lock"),
             status_path=Path("/tmp/bootstrap-status.json"),
+            botmux_configured=True,
         )
+
+        self.assertIn("brew install tmux", script)
+        self.assertIn("跳过工具安装、登录和 botmux setup", script)
+        self.assertIn("botmux plugin install", script)
+        self.assertIn("botmux plugin enable seele", script)
+        self.assertIn("botmux start", script)
+        self.assertIn("botmux autostart enable", script)
+        self.assertIn("botmux status", script)
+        self.assertIn("botmux autostart status", script)
+        self.assertNotIn("npm install -g", script)
+        self.assertNotIn("traex login", script)
+        self.assertNotIn("lark-cli auth", script)
+        self.assertNotIn("agentbuddy login", script)
+        self.assertNotIn("--botmux-setup-coach", script)
+
+    @unittest.skipUnless(sys.platform == "darwin", "requires /bin/zsh")
+    def test_repair_script_executes_tmux_install_then_botmux_recovery(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "bootstrap.command"
-            path.write_text(script, encoding="utf-8")
-            result = mac_byte_bootstrap.subprocess.run(
-                ["/bin/zsh", "-n", str(path)],
+            root = Path(directory)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            log = root / "commands.log"
+            plugin = root / "botmux-skill"
+            plugin.mkdir()
+            (root / "VERSION").write_text("test\n", encoding="utf-8")
+
+            brew = fake_bin / "brew"
+            brew.write_text(
+                "#!/bin/sh\n"
+                "printf 'brew %s\\n' \"$*\" >> \"$SEELE_TEST_LOG\"\n"
+                "if [ \"$1\" = install ] && [ \"$2\" = tmux ]; then\n"
+                "  printf '#!/bin/sh\\nprintf \"tmux 3.5a\\\\n\"\\n' > \"$(dirname \"$0\")/tmux\"\n"
+                "  chmod 755 \"$(dirname \"$0\")/tmux\"\n"
+                "fi\n",
+                encoding="utf-8",
+            )
+            brew.chmod(0o755)
+            botmux = fake_bin / "botmux"
+            botmux.write_text(
+                "#!/bin/sh\n"
+                "printf 'botmux %s\\n' \"$*\" >> \"$SEELE_TEST_LOG\"\n",
+                encoding="utf-8",
+            )
+            botmux.chmod(0o755)
+
+            script_path = root / "bootstrap.command"
+            lock_path = root / "bootstrap.lock"
+            status_path = root / "bootstrap-status.json"
+            lock_path.write_text("locked", encoding="ascii")
+            with patch.object(
+                mac_byte_bootstrap,
+                "app_path",
+                side_effect=lambda *parts: root.joinpath(*parts),
+            ):
+                script = mac_byte_bootstrap.build_bootstrap_script(
+                    "repair",
+                    script_path=script_path,
+                    lock_path=lock_path,
+                    status_path=status_path,
+                    botmux_configured=True,
+                )
+            script_path.write_text(script, encoding="utf-8")
+            script_path.chmod(0o700)
+            env = os.environ.copy()
+            env.update({
+                "HOME": str(root),
+                "PATH": f"{fake_bin}:/usr/bin:/bin",
+                "SEELE_TEST_LOG": str(log),
+                "TERM": "xterm-256color",
+            })
+
+            result = subprocess.run(
+                ["/bin/zsh", str(script_path)],
                 capture_output=True,
                 text=True,
                 check=False,
+                env=env,
             )
-        self.assertEqual(result.returncode, 0, result.stderr)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            commands = log.read_text(encoding="utf-8")
+            self.assertIn("brew install tmux", commands)
+            self.assertIn("botmux plugin install", commands)
+            self.assertIn("botmux plugin enable seele", commands)
+            self.assertIn("botmux start", commands)
+            self.assertIn("botmux autostart enable", commands)
+            self.assertIn("botmux status", commands)
+            self.assertIn("botmux autostart status", commands)
+            self.assertNotIn("traex", commands)
+            self.assertNotIn("lark-cli", commands)
+            self.assertNotIn("agentbuddy", commands)
+            self.assertEqual(
+                json.loads(status_path.read_text(encoding="utf-8"))["state"],
+                "completed",
+            )
+            self.assertFalse(lock_path.exists())
+            self.assertFalse(script_path.exists())
+
+    @unittest.skipUnless(sys.platform == "darwin", "requires /bin/zsh")
+    def test_generated_bootstrap_script_has_valid_zsh_syntax(self):
+        for mode in ("full", "repair"):
+            with self.subTest(mode=mode):
+                script = mac_byte_bootstrap.build_bootstrap_script(
+                    mode,
+                    script_path=Path("/tmp/bootstrap.command"),
+                    lock_path=Path("/tmp/bootstrap.lock"),
+                    status_path=Path("/tmp/bootstrap-status.json"),
+                )
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "bootstrap.command"
+                    path.write_text(script, encoding="utf-8")
+                    result = mac_byte_bootstrap.subprocess.run(
+                        ["/bin/zsh", "-n", str(path)],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_setup_script_prepares_attention_before_botmux(self):
         script = mac_byte_bootstrap.build_bootstrap_script(
@@ -535,7 +688,7 @@ class MacByteBootstrapTests(unittest.TestCase):
             )
             self.assertEqual(status["state"], "running")
 
-    def test_full_repair_preserves_existing_botmux_configuration(self):
+    def test_runtime_repair_preserves_existing_botmux_configuration(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
             config = home / ".botmux" / "bots.json"
@@ -548,14 +701,20 @@ class MacByteBootstrapTests(unittest.TestCase):
                 run.return_value.returncode = 0
                 run.return_value.stderr = ""
                 script = mac_byte_bootstrap.launch_bootstrap(
-                    mode="full",
+                    mode="repair",
                     home=home,
                 )
 
             contents = script.read_text(encoding="utf-8")
             self.assertIn("brew install tmux", contents)
-            self.assertIn("跳过重复 setup", contents)
+            self.assertIn("跳过工具安装、登录和 botmux setup", contents)
             self.assertNotIn("prepare_login_attention 'Botmux 机器人配置'", contents)
+            status = json.loads(
+                (home / ".seele" / "mac_byte" / "bootstrap-status.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(status["mode"], "repair")
 
 
 class PlatformPathTests(unittest.TestCase):
