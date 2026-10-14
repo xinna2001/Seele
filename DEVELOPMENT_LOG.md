@@ -448,6 +448,50 @@ Windows CI 兼容修复及 `v2.0.3` Tag 提交：`ce59731`。
 - 已下载线上 macOS ZIP 并通过发布 SHA256、`unzip -t`、ad-hoc 严格签名、主程序
   smoke 和 coach 路径 smoke；包内版本为 `2.2.1`，helper 存在且可执行。
 
+## 2026-10-14 tmux 与 Homebrew 前置修复
+
+状态：实现与验证完成；PR
+[#1](https://github.com/xinna2001/Seele/pull/1) 的 Windows、macOS、Ubuntu
+跨平台 CI 均已通过，按用户要求由维护者合并，不直接推 main。
+分支：`fix/mac-byte-homebrew-tmux-bootstrap`。
+首个实现提交：`69dca28`。
+共同作者：Cary Cao（GitHub `Carycmj`）。
+
+### 问题结论
+
+1. 用户截图中的缺失项不是 Trae，而是 `tmux`。Botmux daemon 默认使用 tmux 后端，
+   tmux 缺失时无法启动。
+2. Trae CLI 已有独立检测：`command -v traex` 失败时执行字节内部官方安装脚本。
+3. Botmux 尝试自动安装 tmux，但本机没有 Homebrew 时只能输出推荐命令并失败。
+4. 截图中的 Homebrew 命令来自官方安装器，当前脚本通过 `bash -n`。虽然安装器支持
+   `NONINTERACTIVE=1`，但全新 Mac 无缓存 sudo 权限时可能因 `sudo -n` 直接失败，
+   因此实现采用截图中的官方交互命令，保留管理员密码和确认步骤。
+5. Homebrew 的 tmux formula 可用；本机 `brew install --dry-run tmux` 成功解析
+   稳定版和依赖。
+
+### 实现内容
+
+1. 将 `tmux` 加入 mac_byte 独立命令检测，缺失时进入完整修复路径。
+2. tmux 缺失但 Homebrew 已存在：直接执行 `brew install tmux`。
+3. Homebrew 也缺失：下载并运行官方交互安装脚本，用户完成必要的管理员权限确认后，
+   加载 Apple Silicon 或 Intel 的 `brew shellenv`，再自动安装 tmux。
+4. 安装完成后执行 `tmux -V`，并在最终七命令校验中再次检查 tmux。
+5. 仅补装依赖且 `~/.botmux/bots.json` 已有效时，保留现有机器人配置并跳过重复
+   `botmux setup`。
+
+### 本地验证
+
+- Homebrew 官方安装脚本下载成功，本次 SHA256 为
+  `5f333bbe53bc490e51e7ccb1df8779b3dd6ee73a1a7379efda216edb08ccb148`；
+  `bash -n` 和 `--help` 均通过，测试后临时文件已删除。
+- `brew install --dry-run tmux` 成功解析稳定版及依赖，不修改本机已安装版本。
+- 生成的“需要 setup”和“已有配置跳过 setup”两种脚本均通过 `/bin/zsh -n`。
+- Python `compileall`：通过。
+- Python 单元测试：38 项通过。
+- Botmux 插件 build、validate 和 MCP smoke：通过。
+- 本地 Apple Silicon `.app` 与 console helper 构建、ad-hoc 严格签名、主程序 smoke
+  和 coach 路径 smoke：通过；临时构建目录已物理删除。
+
 ## 已实现的 2.0 架构
 
 - `Seele.py`：PyQt 桌宠、托盘菜单、气泡和 Botmux 状态展示。

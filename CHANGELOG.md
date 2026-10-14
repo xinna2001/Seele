@@ -1,5 +1,12 @@
 # 更新记录
 
+## 未发布
+
+- 将 `tmux` 纳入 mac_byte 前置依赖检测；缺失时自动使用已有 Homebrew 安装。
+- 本机同时缺少 Homebrew 时，先运行官方安装脚本并完成必要的系统权限确认，再执行
+  `brew install tmux`。
+- 仅修复前置依赖且已有 Botmux 机器人配置时，跳过重复 `botmux setup`。
+
 ## 2.2.1
 
 - Trae、Lark 和 AgentBuddy 登录阶段在后台清理旧终端记录但不主动前置 Terminal，

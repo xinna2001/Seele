@@ -1,12 +1,12 @@
 # mac_byte 自动安装命令清单
 
-本文记录 Seele `v2.2.1` 中 `mac_byte` 首次启动实际执行的命令。权威实现位于
+本文记录 Seele `main` 分支（基于 `v2.2.1`）中 `mac_byte` 首次启动实际执行的命令。权威实现位于
 `mac_byte_bootstrap.py` 和 `botmux_setup_coach.py`。
 
 ## 触发模式
 
 Seele 仅在 macOS 且 `EDITION=mac_byte` 时运行安装检测。启动时分别解析
-`node`、`npm`、`traex`、`lark-cli`、`agentbuddy` 和 `botmux`：
+`node`、`npm`、`tmux`、`traex`、`lark-cli`、`agentbuddy` 和 `botmux`：
 
 - `full`：任一命令不存在，进入完整流程，但每个已安装组件都会独立跳过；
 - `setup`：六个命令均存在，但 `~/.botmux/bots.json` 没有有效配置；
@@ -37,6 +37,27 @@ node -v
 npm -v
 ```
 
+### Homebrew 与 tmux
+
+```bash
+if ! command -v tmux >/dev/null 2>&1; then
+  if ! command -v brew >/dev/null 2>&1; then
+    installer="$(
+      curl -fsSL \
+        https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh
+    )"
+    /bin/bash -c "$installer"
+    # 按 Apple Silicon / Intel 实际路径加载 brew shellenv。
+  fi
+  HOMEBREW_NO_AUTO_UPDATE=1 brew install tmux
+fi
+tmux -V
+```
+
+Homebrew 已存在或 `tmux` 已存在时直接跳过对应安装。全新 Mac 首次安装 Homebrew
+通常需要管理员密码和一次确认，因此保留官方交互流程，不模拟密码或回车。权限确认完成
+后脚本自动继续安装 tmux；安装失败则保留终端错误，不会启动缺少 tmux 的 Botmux daemon。
+
 ### CLI 工具
 
 ```bash
@@ -60,7 +81,7 @@ fi
 ```
 
 内部 npm 源只传给对应安装命令，不执行 `npm config set registry`，因此不会永久
-修改用户的全局 npm 配置。安装后再次检查全部六个命令；任何一项仍无法解析都会停止，
+修改用户的全局 npm 配置。安装后再次检查全部七个命令；任何一项仍无法解析都会停止，
 不会带着不完整环境进入登录阶段。
 
 ## 登录与状态校验
@@ -161,7 +182,9 @@ SEELE_RESOURCES_DIR="<APP_RESOURCES>" \
 - 检测到工作目录模式和目录输入后，自动回车接受 Botmux 默认值；
 - 不使用固定等待秒数，不对未知提示自动输入。
 
-仅配置模式直接从该 PTY 配置步骤开始，不重复安装或登录前三个工具。
+仅配置模式直接从该 PTY 配置步骤开始，不重复安装或登录前三个工具。若启动检测发现
+只缺少 tmux，则进入完整修复路径；已有 `~/.botmux/bots.json` 配置时只补依赖并跳过
+重复 setup。
 
 ## 插件、启动和读回
 

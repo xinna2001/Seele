@@ -18,10 +18,14 @@ from platform_utils import app_path
 EDITION_NAME = "mac_byte"
 BYTE_NPM_REGISTRY = "https://bnpm.byted.org/"
 PUBLIC_NPM_REGISTRY = "https://registry.npmjs.org/"
+HOMEBREW_INSTALL_URL = (
+    "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
+)
 LOCK_TTL_SECONDS = 6 * 60 * 60
 BOOTSTRAP_COMMANDS = (
     "node",
     "npm",
+    "tmux",
     "traex",
     "lark-cli",
     "agentbuddy",
@@ -148,8 +152,44 @@ export NVM_DIR="$HOME/.nvm"
 if [ -s "$NVM_DIR/nvm.sh" ]; then
   source "$NVM_DIR/nvm.sh"
 fi
-export PATH="$HOME/.local/bin:$HOME/.botmux/bin:$PATH"
+export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$HOME/.botmux/bin:$PATH"
+if command -v brew >/dev/null 2>&1; then
+  eval "$(brew shellenv)"
+fi
 hash -r
+""".strip()
+
+
+def _tmux_install_commands() -> str:
+    return f"""
+if command -v tmux >/dev/null 2>&1; then
+  printf '[已安装] tmux: %s\\n' "$(command -v tmux)"
+else
+  printf '[待安装] tmux\\n'
+  if ! command -v brew >/dev/null 2>&1; then
+    printf '[待安装] Homebrew（tmux 的 macOS 包管理器）\\n'
+    homebrew_installer="$(curl -fsSL {HOMEBREW_INSTALL_URL})" || {{
+      printf '\\nHomebrew 安装脚本下载失败，请检查网络后重试。\\n' >&2
+      exit 1
+    }}
+    /bin/bash -c "$homebrew_installer"
+    unset homebrew_installer
+    export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+    if [ -x /opt/homebrew/bin/brew ]; then
+      eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [ -x /usr/local/bin/brew ]; then
+      eval "$(/usr/local/bin/brew shellenv)"
+    fi
+    hash -r
+  fi
+  if ! command -v brew >/dev/null 2>&1; then
+    printf '\\nHomebrew 安装校验失败，无法继续安装 tmux。\\n' >&2
+    exit 1
+  fi
+  HOMEBREW_NO_AUTO_UPDATE=1 brew install tmux
+  hash -r
+fi
+tmux -V
 """.strip()
 
 
@@ -194,7 +234,16 @@ def _login_command(*command: str) -> str:
     ])
 
 
-def _full_install_commands() -> str:
+def _full_install_commands(*, run_botmux_setup: bool = True) -> str:
+    botmux_setup = (
+        f"""
+{_shell_login_attention("Botmux 机器人配置")}
+{_shell_voice("botmux_setup", "请扫描终端二维码，完成 Botmux 机器人配置")}
+{_botmux_coach_command()}
+""".strip()
+        if run_botmux_setup
+        else "printf '\\nBotmux 已有机器人配置，跳过重复 setup。\\n'"
+    )
     return f"""
 {_shell_voice("install", "开始安装 Botmux 及字节内部依赖")}
 
@@ -216,6 +265,8 @@ else
 fi
 node -v
 npm -v
+
+{_tmux_install_commands()}
 
 if command -v traex >/dev/null 2>&1; then
   printf '[已安装] Trae CLI: %s\\n' "$(command -v traex)"
@@ -251,7 +302,7 @@ else
 fi
 
 {_npm_prelude()}
-for required_command in node npm traex lark-cli agentbuddy botmux; do
+for required_command in node npm tmux traex lark-cli agentbuddy botmux; do
   if ! command -v "$required_command" >/dev/null 2>&1; then
     printf '\\n安装校验失败：找不到命令 %s。\\n' "$required_command" >&2
     exit 1
@@ -299,9 +350,7 @@ if ! agentbuddy status --json >/dev/null 2>&1; then
 fi
 agentbuddy status --json
 
-{_shell_login_attention("Botmux 机器人配置")}
-{_shell_voice("botmux_setup", "请扫描终端二维码，完成 Botmux 机器人配置")}
-{_botmux_coach_command()}
+{botmux_setup}
 """.strip()
 
 
@@ -331,10 +380,15 @@ def build_bootstrap_script(
     script_path: Path,
     lock_path: Path,
     status_path: Path,
+    botmux_configured: bool = False,
 ) -> str:
     if mode not in {"full", "setup"}:
         raise ValueError("bootstrap mode must be full or setup")
-    workflow = _full_install_commands() if mode == "full" else _setup_only_commands()
+    workflow = (
+        _full_install_commands(run_botmux_setup=not botmux_configured)
+        if mode == "full"
+        else _setup_only_commands()
+    )
     version = current_version()
     return f"""#!/bin/zsh
 set -u
@@ -481,6 +535,7 @@ def launch_bootstrap(
             script_path=script_path,
             lock_path=lock_path,
             status_path=status_path,
+            botmux_configured=botmux_is_configured(home),
         ),
         encoding="utf-8",
     )
