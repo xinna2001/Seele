@@ -512,10 +512,20 @@ class MacByteBootstrapTests(unittest.TestCase):
             lock_path = root / "bootstrap.lock"
             status_path = root / "bootstrap-status.json"
             lock_path.write_text("locked", encoding="ascii")
-            with patch.object(
-                mac_byte_bootstrap,
-                "app_path",
-                side_effect=lambda *parts: root.joinpath(*parts),
+            with (
+                patch.object(
+                    mac_byte_bootstrap,
+                    "app_path",
+                    side_effect=lambda *parts: root.joinpath(*parts),
+                ),
+                patch.object(
+                    mac_byte_bootstrap,
+                    "_npm_prelude",
+                    return_value=(
+                        f'export PATH="{fake_bin}:/usr/bin:/bin"\n'
+                        "hash -r"
+                    ),
+                ),
             ):
                 script = mac_byte_bootstrap.build_bootstrap_script(
                     "repair",
