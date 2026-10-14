@@ -310,6 +310,24 @@ class MacByteBootstrapTests(unittest.TestCase):
 
         self.assertEqual(missing, ["tmux", "traex", "agentbuddy", "botmux"])
 
+    def test_stale_traex_is_treated_as_missing_dependency(self):
+        with (
+            patch.object(
+                mac_byte_bootstrap,
+                "_command_path",
+                side_effect=lambda command: f"/bin/{command}",
+            ),
+            patch.object(
+                mac_byte_bootstrap,
+                "_traex_supports_backend",
+                return_value=False,
+            ) as supports_backend,
+        ):
+            missing = mac_byte_bootstrap.missing_bootstrap_commands()
+
+        self.assertEqual(missing, ["traex"])
+        supports_backend.assert_called_once_with("/bin/traex")
+
     def test_full_script_uses_official_login_commands_without_manual_pauses(self):
         script = mac_byte_bootstrap.build_bootstrap_script(
             "full",
@@ -338,6 +356,9 @@ class MacByteBootstrapTests(unittest.TestCase):
             self.assertIn(f"command -v {command}", script)
         self.assertIn("TRAEX_INSTALL_ASSUME_YES=1", script)
         self.assertIn("TRAEX_INSTALL_REMOVE_COCO=1", script)
+        self.assertIn("traex backend cn --help", script)
+        self.assertIn("当前 Trae CLI 不支持 backend cn", script)
+        self.assertIn("当前版本不支持 backend cn", script)
         self.assertIn("traex backend cn", script)
         self.assertIn("traex login --sso-device", script)
         self.assertIn("traex login status", script)
@@ -440,6 +461,74 @@ class MacByteBootstrapTests(unittest.TestCase):
         self.assertNotIn("\nbotmux setup\n", script)
         self.assertNotIn("IFS= read -r _", script)
         self.assertIn("[语音占位符]", script)
+
+    @unittest.skipIf(os.name == "nt", "requires a POSIX shell")
+    def test_traex_install_upgrades_cli_without_backend_command(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            log = root / "commands.log"
+            ready = root / "traex-ready"
+
+            traex = fake_bin / "traex"
+            traex.write_text(
+                "#!/bin/sh\n"
+                "printf 'traex %s\\n' \"$*\" >> \"$SEELE_TEST_LOG\"\n"
+                "if [ \"$1\" = backend ] && [ \"$2\" = cn ] && "
+                "[ \"$3\" = --help ]; then\n"
+                "  if [ -f \"$SEELE_TRAEX_READY\" ]; then\n"
+                "    exit 0\n"
+                "  fi\n"
+                "  printf \"error: unexpected argument 'cn' found\\n\" >&2\n"
+                "  exit 2\n"
+                "fi\n"
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            traex.chmod(0o755)
+
+            curl = fake_bin / "curl"
+            curl.write_text(
+                "#!/bin/sh\n"
+                "printf 'curl %s\\n' \"$*\" >> \"$SEELE_TEST_LOG\"\n"
+                "printf '%s\\n' \\\n"
+                "  'printf \"installer assume=%s remove_coco=%s "
+                "remove_brew=%s\\n\" \"$TRAEX_INSTALL_ASSUME_YES\" "
+                "\"$TRAEX_INSTALL_REMOVE_COCO\" "
+                "\"$TRAEX_INSTALL_REMOVE_BREW\" >> \"$SEELE_TEST_LOG\"' \\\n"
+                "  ': > \"$SEELE_TRAEX_READY\"'\n",
+                encoding="utf-8",
+            )
+            curl.chmod(0o755)
+
+            env = os.environ.copy()
+            env.update({
+                "PATH": f"{fake_bin}:/usr/bin:/bin",
+                "SEELE_TEST_LOG": str(log),
+                "SEELE_TRAEX_READY": str(ready),
+            })
+            result = subprocess.run(
+                ["/bin/sh", "-c", mac_byte_bootstrap._traex_install_commands()],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(ready.is_file())
+            commands = log.read_text(encoding="utf-8")
+            self.assertEqual(commands.count("traex backend cn --help"), 2)
+            self.assertIn("curl -fsSL", commands)
+            self.assertIn(
+                "installer assume=1 remove_coco=1 remove_brew=0",
+                commands,
+            )
+            self.assertIn(
+                "[待升级] 当前 Trae CLI 不支持 backend cn",
+                result.stdout,
+            )
 
     def test_full_script_skips_botmux_setup_when_already_configured(self):
         script = mac_byte_bootstrap.build_bootstrap_script(

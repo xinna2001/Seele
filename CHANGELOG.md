@@ -1,5 +1,11 @@
 # 更新记录
 
+## 未发布
+
+- mac_byte 安装不再把“存在 `traex` 命令”等同于版本可用；旧版 Trae CLI 缺少
+  `backend cn` 能力时自动升级并复核，修复登录开始前报
+  `unexpected argument 'cn' found` 后直接退出的问题。
+
 ## 2.2.2
 
 - 将 `tmux` 纳入 mac_byte 前置依赖检测；缺失时自动使用已有 Homebrew 安装。

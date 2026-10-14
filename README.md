@@ -62,7 +62,8 @@ Linux 还需由系统包管理器安装 Qt/XCB、PortAudio 和 Tk。Wayland、ma
 
 仓库根目录的 [`EDITION`](EDITION) 为 `mac_byte` 时，Seele 会在 macOS 首次启动时检查完整工具链：
 
-- 独立检测 Node.js、npm、tmux、Trae CLI、Lark CLI、AgentBuddy 和 Botmux，已有组件直接跳过，只安装缺失项；
+- 独立检测 Node.js、npm、tmux、Trae CLI、Lark CLI、AgentBuddy 和 Botmux；Trae CLI
+  还会校验 `backend cn` 能力，旧版命令虽存在但不支持该能力时自动升级；
 - 缺少 tmux 时优先使用已有 Homebrew 安装；Homebrew 也不存在时先运行官方安装脚本，再安装 tmux；
 - 工具链完整但没有机器人配置：直接打开 `botmux setup`；
 - 工具链完整且 Botmux 已配置：不重复打开安装流程；

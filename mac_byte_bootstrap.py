@@ -96,12 +96,29 @@ def _command_path(command: str) -> str | None:
     return lines[-1] if lines else None
 
 
+def _traex_supports_backend(path: str) -> bool:
+    try:
+        result = subprocess.run(
+            [path, "backend", "cn", "--help"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=8,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0
+
+
 def missing_bootstrap_commands() -> list[str]:
-    return [
-        command
-        for command in BOOTSTRAP_COMMANDS
-        if _command_path(command) is None
-    ]
+    missing = []
+    for command in BOOTSTRAP_COMMANDS:
+        path = _command_path(command)
+        if path is None or (
+            command == "traex" and not _traex_supports_backend(path)
+        ):
+            missing.append(command)
+    return missing
 
 
 def botmux_is_configured(home: str | os.PathLike | None = None) -> bool:
@@ -227,6 +244,35 @@ tmux -V
 """.strip()
 
 
+def _traex_install_commands() -> str:
+    return """
+traex_requires_install=0
+if command -v traex >/dev/null 2>&1; then
+  printf '[已安装] Trae CLI: %s\\n' "$(command -v traex)"
+  if ! traex backend cn --help >/dev/null 2>&1; then
+    printf '[待升级] 当前 Trae CLI 不支持 backend cn，开始升级。\\n'
+    traex_requires_install=1
+  fi
+else
+  printf '[待安装] Trae CLI\\n'
+  traex_requires_install=1
+fi
+
+if [ "$traex_requires_install" -eq 1 ]; then
+  curl -fsSL https://code.byted.org/api/tos-proxy/download/traex_install.sh |
+    env TRAEX_INSTALL_ASSUME_YES=1 TRAEX_INSTALL_REMOVE_COCO=1 TRAEX_INSTALL_REMOVE_BREW=0 sh
+  hash -r
+fi
+unset traex_requires_install
+
+if ! command -v traex >/dev/null 2>&1 ||
+   ! traex backend cn --help >/dev/null 2>&1; then
+  printf '\\nTrae CLI 安装校验失败：当前版本不支持 backend cn。\\n' >&2
+  exit 1
+fi
+""".strip()
+
+
 def _shell_login_attention(stage_name: str) -> str:
     return f"prepare_login_attention {shlex.quote(stage_name)}"
 
@@ -302,14 +348,7 @@ npm -v
 
 {_tmux_install_commands()}
 
-if command -v traex >/dev/null 2>&1; then
-  printf '[已安装] Trae CLI: %s\\n' "$(command -v traex)"
-else
-  printf '[待安装] Trae CLI\\n'
-  curl -fsSL https://code.byted.org/api/tos-proxy/download/traex_install.sh |
-    env TRAEX_INSTALL_ASSUME_YES=1 TRAEX_INSTALL_REMOVE_COCO=1 TRAEX_INSTALL_REMOVE_BREW=0 sh
-  hash -r
-fi
+{_traex_install_commands()}
 
 if command -v lark-cli >/dev/null 2>&1; then
   printf '[已安装] Lark CLI: %s\\n' "$(command -v lark-cli)"
