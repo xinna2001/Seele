@@ -6,9 +6,11 @@
 ## 触发模式
 
 Seele 仅在 macOS 且 `EDITION=mac_byte` 时运行安装检测。启动时分别解析
-`node`、`npm`、`tmux`、`traex`、`lark-cli`、`agentbuddy` 和 `botmux`：
+`node`、`npm`、`tmux`、`traex`、`lark-cli`、`agentbuddy` 和 `botmux`；其中
+`traex` 还必须通过 `backend cn --help` 能力探测：
 
-- `full`：缺少普通工具或 Botmux 本体，进入完整流程，但每个已安装组件都会独立跳过；
+- `full`：缺少普通工具、Trae CLI 能力不兼容或缺少 Botmux 本体，进入完整流程，
+  但每个兼容的已安装组件都会独立跳过；
 - `setup`：七个命令均存在，但 `~/.botmux/bots.json` 没有有效配置；
 - `repair`：已有有效 Botmux 配置，但只缺少 `tmux`，或全部命令已存在但 Botmux
   supervisor 没有运行；
@@ -84,7 +86,8 @@ Botmux，不重复登录，也不进入 `botmux setup`。如果 `tmux` 已经补
 ### CLI 工具
 
 ```bash
-if ! command -v traex >/dev/null 2>&1; then
+if ! command -v traex >/dev/null 2>&1 ||
+   ! traex backend cn --help >/dev/null 2>&1; then
   curl -fsSL https://code.byted.org/api/tos-proxy/download/traex_install.sh |
     env TRAEX_INSTALL_ASSUME_YES=1 \
         TRAEX_INSTALL_REMOVE_COCO=1 \
@@ -102,6 +105,11 @@ if ! command -v botmux >/dev/null 2>&1; then
   npm install -g botmux@latest --registry https://registry.npmjs.org/
 fi
 ```
+
+Seele 不再只按 `command -v traex` 判断 Trae CLI 可用。早期版本虽然已有 `traex`
+命令，但没有 `backend` 子命令，会把 `backend` 当作提示词、再对 `cn` 报
+`unexpected argument`。安装前以无副作用的 `traex backend cn --help` 探测所需能力，
+不支持时调用官方安装脚本升级；升级后重复探测，仍不支持则停止，不进入登录阶段。
 
 内部 npm 源只传给对应安装命令，不执行 `npm config set registry`，因此不会永久
 修改用户的全局 npm 配置。安装后再次检查全部七个命令；任何一项仍无法解析都会停止，
