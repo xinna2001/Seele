@@ -116,11 +116,45 @@ def botmux_is_configured(home: str | os.PathLike | None = None) -> bool:
     return isinstance(data, dict) and bool(data)
 
 
+def botmux_is_running(home: str | os.PathLike | None = None) -> bool:
+    botmux = _command_path("botmux")
+    if not botmux:
+        return False
+    env = os.environ.copy()
+    if home is not None:
+        env["HOME"] = str(Path(home))
+    try:
+        result = subprocess.run(
+            [botmux, "status"],
+            capture_output=True,
+            text=True,
+            timeout=8,
+            check=False,
+            env=env,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    output = f"{result.stdout}\n{result.stderr}".lower()
+    if "未在运行" in output or "not running" in output:
+        return False
+    return result.returncode == 0 and (
+        "supervisor 在线" in output
+        or "supervisor online" in output
+        or "daemon is running" in output
+    )
+
+
 def bootstrap_mode(home: str | os.PathLike | None = None) -> str:
-    if missing_bootstrap_commands():
+    missing = missing_bootstrap_commands()
+    configured = botmux_is_configured(home)
+    if missing:
+        if configured and missing == ["tmux"]:
+            return "repair"
         return "full"
-    if not botmux_is_configured(home):
+    if not configured:
         return "setup"
+    if not botmux_is_running(home):
+        return "repair"
     return "ready"
 
 
@@ -363,6 +397,21 @@ def _setup_only_commands() -> str:
 """.strip()
 
 
+def _runtime_repair_commands() -> str:
+    return f"""
+{_npm_prelude()}
+printf '\\n检测到已有 Botmux 配置，开始修复运行环境。\\n'
+
+{_tmux_install_commands()}
+
+if ! command -v botmux >/dev/null 2>&1; then
+  printf '\\n运行恢复失败：找不到 Botmux 命令。\\n' >&2
+  exit 1
+fi
+printf '\\n保留现有机器人配置，跳过工具安装、登录和 botmux setup。\\n'
+""".strip()
+
+
 def _seele_plugin_commands() -> str:
     plugin_dir = app_path("botmux-skill")
     if not plugin_dir.is_dir():
@@ -382,14 +431,32 @@ def build_bootstrap_script(
     status_path: Path,
     botmux_configured: bool = False,
 ) -> str:
-    if mode not in {"full", "setup"}:
-        raise ValueError("bootstrap mode must be full or setup")
-    workflow = (
-        _full_install_commands(run_botmux_setup=not botmux_configured)
-        if mode == "full"
-        else _setup_only_commands()
-    )
+    if mode not in {"full", "setup", "repair"}:
+        raise ValueError("bootstrap mode must be full, setup or repair")
+    if mode == "full":
+        workflow = _full_install_commands(
+            run_botmux_setup=not botmux_configured
+        )
+    elif mode == "setup":
+        workflow = _setup_only_commands()
+    else:
+        workflow = _runtime_repair_commands()
     version = current_version()
+    title = (
+        "Botmux 运行恢复"
+        if mode == "repair"
+        else "Botmux 安装与登录"
+    )
+    intro = (
+        "将保留现有配置，只修复缺失环境并恢复 Botmux 运行。"
+        if mode == "repair"
+        else "安装命令需要字节内网。登录阶段会展示链接或二维码。"
+    )
+    completion = (
+        "Botmux 运行环境已修复，并已重新启动和设置开机自启。"
+        if mode == "repair"
+        else "Botmux 已安装、配置并启动。"
+    )
     return f"""#!/bin/zsh
 set -u
 set -o pipefail
@@ -478,8 +545,8 @@ finish() {{
 trap finish EXIT
 
 clear
-printf '\\nSeele {version} mac_byte - Botmux 安装与登录\\n'
-printf '安装命令需要字节内网。登录阶段会展示链接或二维码。\\n\\n'
+printf '\\nSeele {version} mac_byte - {title}\\n'
+printf '{intro}\\n\\n'
 
 set -e
 {workflow}
@@ -491,7 +558,7 @@ botmux autostart enable
 botmux status
 botmux autostart status
 
-printf '\\nBotmux 已安装、配置并启动。\\n'
+printf '\\n{completion}\\n'
 """
 
 
@@ -519,7 +586,7 @@ def launch_bootstrap(
     selected_mode = mode or bootstrap_mode(home)
     if selected_mode == "ready":
         return None
-    if selected_mode not in {"full", "setup"}:
+    if selected_mode not in {"full", "setup", "repair"}:
         raise ValueError("unsupported bootstrap mode")
 
     directory = _state_dir(home)

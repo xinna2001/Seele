@@ -526,6 +526,39 @@ Windows CI 兼容修复及 `v2.0.3` Tag 提交：`ce59731`。
   ad-hoc 严格签名、主程序 smoke、coach 路径 smoke 和独立 helper smoke；包内版本
   与 plist 版本均为 `2.2.2`。
 
+## 2026-10-14 Botmux tmux 半完成安装恢复
+
+状态：已完成本地验证，待 PR 审核。
+分支：`fix/mac-byte-botmux-tmux-recovery`。
+
+### 问题结论
+
+1. `v2.2.2` 已能发现并补装 tmux，也会在脚本末尾执行 Botmux 启动与开机自启。
+2. 但“已有 Botmux 配置、只缺 tmux”仍被归入 `full`，会额外检查所有工具和登录，
+   不符合只恢复运行环境的预期。
+3. tmux 补好后如果 Botmux 仍离线，原检测只看命令和配置，会误判为 `ready`，后续
+   双击 Seele 不再触发恢复。
+4. `botmux status` 在 daemon 离线时仍返回 0，必须检查明确的 supervisor 在线文本，
+   不能只依赖退出码。
+
+### 实现内容
+
+1. 新增 `repair` 模式：已有有效 `bots.json` 且只缺 tmux 时进入运行恢复。
+2. 命令完整、配置有效但 supervisor 离线时同样进入 `repair`。
+3. `repair` 只补装或校验 tmux，然后安装/启用 Seele 插件，执行 `botmux start`、
+   `botmux autostart enable` 及两项状态读回。
+4. 恢复过程保留现有机器人配置，跳过 Node.js、Trae CLI、Lark CLI、AgentBuddy、
+   Botmux 安装、全部登录和 `botmux setup`。
+
+### 本地验证
+
+- 新增 supervisor 在线/离线识别和三种模式路由测试。
+- 新增隔离 shell 集成测试：模拟 tmux 缺失，验证只执行 `brew install tmux`，随后
+  依次执行插件安装、启动、开机自启和状态读回，并验证状态文件为 `completed`。
+- `full` 与 `repair` 生成脚本均通过 `/bin/zsh -n`。
+- Python 单元测试：41 项通过。
+- Botmux 插件 build、validate 和 MCP smoke：通过。
+
 ## 已实现的 2.0 架构
 
 - `Seele.py`：PyQt 桌宠、托盘菜单、气泡和 Botmux 状态展示。

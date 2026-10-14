@@ -514,6 +514,8 @@ class DesktopWife(QWidget):
         if state == "launched":
             if event.get("mode") == "full":
                 text = "未检测到 Botmux，已打开安装终端。登录时请按终端提示操作。"
+            elif event.get("mode") == "repair":
+                text = "检测到 Botmux 未运行，已打开终端修复 tmux 并恢复启动与开机自启。"
             else:
                 text = "Botmux 尚未配置，已打开扫码配置终端。"
             self._show_bubble_text(text)
