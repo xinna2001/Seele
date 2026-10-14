@@ -561,8 +561,12 @@ Windows CI 兼容修复及 `v2.0.3` Tag 提交：`ce59731`。
 
 ## 2026-10-14 Trae CLI 旧版本能力修复
 
-状态：已完成代码与隔离回归测试，待 PR 审核。
+状态：已通过 PR
+[#3](https://github.com/xinna2001/Seele/pull/3) 合并 `main`，纳入 `v2.2.3`；
+PR 的 Windows、macOS、Ubuntu 跨平台 CI 均已通过。
 分支：`fix/mac-byte-stale-traex-backend`。
+修复提交：`43e849f`。
+合并提交：`f53a81b`。
 
 ### 问题结论
 
@@ -588,6 +592,13 @@ Windows CI 兼容修复及 `v2.0.3` Tag 提交：`ce59731`。
   传递三项非交互环境变量，再次探测成功。
 - Python `compileall`：通过；Python 单元测试：43 项通过。
 - `full`、`setup` 和 `repair` 三种生成脚本均通过 `/bin/zsh -n`。
+
+### v2.2.3 发布准备
+
+- `VERSION`、`CHANGELOG.md` 和 mac_byte 安装命令文档已更新为 `2.2.3`。
+- GitHub Release 说明已补充 Trae CLI `backend cn` 能力探测与旧版本自动升级行为。
+- Python 单元测试 43 项、Botmux 插件 build/validate/MCP smoke、Python `compileall`
+  和 `full`/`setup`/`repair` 三种生成脚本语法检查已重新执行并通过。
 
 ## 已实现的 2.0 架构
 
@@ -623,7 +634,7 @@ git diff --check
 
 ## 后续待验收
 
-1. 在全新字节 Apple Silicon 电脑验证 `v2.2.2` 完整安装和失败续跑。
+1. 在全新字节 Apple Silicon 电脑验证 `v2.2.3` 完整安装和失败续跑。
 2. 验证 Trae、Lark CLI、AgentBuddy 的真实首次登录和自动续跑。
 3. 验证 Botmux 扫码、语音提示、`traex` 自动选择和默认目录自动确认。
 4. 普通公网 macOS 版本、Developer ID 签名和公证仍未完成。
@@ -633,5 +644,5 @@ git diff --check
 1. 先阅读本文件和 `.trae/skills/seele-botmux/SKILL.md`。
 2. 运行 `git status --short --branch`，保护所有本地未提交修改。
 3. 不以远端 Release 安装包覆盖当前工作区的未提交修改。
-4. 按“后续待验收”在全新字节 Apple Silicon 电脑验证 `v2.2.2`，不要重复创建
+4. 按“后续待验收”在全新字节 Apple Silicon 电脑验证 `v2.2.3`，不要重复创建
    Tag 或发布安装包。
