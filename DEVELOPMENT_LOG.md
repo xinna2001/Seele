@@ -14,6 +14,7 @@
 
 - 仓库：`https://github.com/xinna2001/Seele`
 - 当前分支：`main`
+- `v2.2.2` 发布提交：`cf7c73e`
 - `v2.2.1` 发布提交：`e9b5693`
 - `v2.2.0` 发布提交：`6261e72`
 - `v2.1.1` 发布提交：`860edf2`
@@ -25,7 +26,9 @@
 - `v2.0.0` 发布基线提交：`8588a7d`
 - `v1.0.0`：提交 `0619912`
 - GitHub 已存在 `v1.0.0`、`v2.0.0`、`v2.0.1`、`v2.0.3`、`v2.1.0`、
-  `v2.1.1`、`v2.2.0` 和 `v2.2.1` Release。
+  `v2.1.1`、`v2.2.0`、`v2.2.1` 和 `v2.2.2` Release。
+- `v2.2.2` Release：
+  `https://github.com/xinna2001/Seele/releases/tag/v2.2.2`。
 - `v2.2.1` Release：
   `https://github.com/xinna2001/Seele/releases/tag/v2.2.1`。
 - `v2.2.0` Release：
@@ -451,8 +454,8 @@ Windows CI 兼容修复及 `v2.0.3` Tag 提交：`ce59731`。
 ## 2026-10-14 tmux 与 Homebrew 前置修复
 
 状态：已通过 PR
-[#1](https://github.com/xinna2001/Seele/pull/1) 合并 `main`，纳入 `v2.2.2`；
-PR 及合并后的 Windows、macOS、Ubuntu 跨平台 CI 均已通过。
+[#1](https://github.com/xinna2001/Seele/pull/1) 合并 `main` 并发布 `v2.2.2`；
+本地、PR、`main`、Tag 和线上安装资产均验证通过。
 分支：`fix/mac-byte-homebrew-tmux-bootstrap`。
 首个实现提交：`69dca28`。
 合并提交：`b476900`。
@@ -507,6 +510,21 @@ PR 及合并后的 Windows、macOS、Ubuntu 跨平台 CI 均已通过。
   `877c8f7b62aa5c721ddf9a735b360d7e1ecf267fe511385f9afd0a343eba239e`。
 - 最终 ZIP 重新解压后再次通过严格签名、主程序、coach 和 helper smoke；构建与验证
   临时目录均已物理删除。
+
+### v2.2.2 线上发布验证
+
+- 发布提交与 Tag 目标：`cf7c73e98fbfada28563bf4489260b081b0019b5`。
+- `main` 跨平台工作流 `38537489923`：Windows、macOS、Ubuntu 全部成功。
+- `v2.2.2` 跨平台工作流 `38537656527`：Windows、macOS、Ubuntu 全部成功。
+- `v2.2.2` 打包发布工作流 `38537656591`：Windows、macOS 打包及 Release 发布成功。
+- Release 包含 8 个预期资产，在线 macOS manifest 确认版本为 `2.2.2`、提交为
+  `cf7c73e98fbfada28563bf4489260b081b0019b5`、平台为 `macos-arm64`。
+- 在线 SHA256：
+  - ZIP：`247705921074f731f943d0afc47e9fb9dcca1b463566d0e80f2b6ae7336c5386`
+  - DMG：`abf669a43d59d986a2b98c33dd07d9073023e65a296049e020d9884327067e7e`
+- 已下载线上 macOS ZIP 和 DMG，并通过发布 SHA256、`unzip -t`、`hdiutil verify`、
+  ad-hoc 严格签名、主程序 smoke、coach 路径 smoke 和独立 helper smoke；包内版本
+  与 plist 版本均为 `2.2.2`。
 
 ## 已实现的 2.0 架构
 
