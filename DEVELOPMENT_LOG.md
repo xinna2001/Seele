@@ -14,6 +14,7 @@
 
 - 仓库：`https://github.com/xinna2001/Seele`
 - 当前分支：`main`
+- `v2.2.3` 发布提交：`6169d28`
 - `v2.2.2` 发布提交：`cf7c73e`
 - `v2.2.1` 发布提交：`e9b5693`
 - `v2.2.0` 发布提交：`6261e72`
@@ -26,7 +27,9 @@
 - `v2.0.0` 发布基线提交：`8588a7d`
 - `v1.0.0`：提交 `0619912`
 - GitHub 已存在 `v1.0.0`、`v2.0.0`、`v2.0.1`、`v2.0.3`、`v2.1.0`、
-  `v2.1.1`、`v2.2.0`、`v2.2.1` 和 `v2.2.2` Release。
+  `v2.1.1`、`v2.2.0`、`v2.2.1`、`v2.2.2` 和 `v2.2.3` Release。
+- `v2.2.3` Release：
+  `https://github.com/xinna2001/Seele/releases/tag/v2.2.3`。
 - `v2.2.2` Release：
   `https://github.com/xinna2001/Seele/releases/tag/v2.2.2`。
 - `v2.2.1` Release：
@@ -599,6 +602,25 @@ PR 的 Windows、macOS、Ubuntu 跨平台 CI 均已通过。
 - GitHub Release 说明已补充 Trae CLI `backend cn` 能力探测与旧版本自动升级行为。
 - Python 单元测试 43 项、Botmux 插件 build/validate/MCP smoke、Python `compileall`
   和 `full`/`setup`/`repair` 三种生成脚本语法检查已重新执行并通过。
+
+### v2.2.3 线上发布验证
+
+- 发布分支提交：`ca86e82`；`main` 合并与 Tag 目标提交：`6169d28`。
+- 发布分支跨平台工作流 `38556522449` 和 `main` 跨平台工作流 `38556675686`：
+  Windows、macOS、Ubuntu 全部成功。
+- `v2.2.3` 打包发布工作流 `38556850903`：Windows、mac_byte 打包、smoke、
+  资产上传及 GitHub Release 发布全部成功。
+- Release 包含 8 个预期资产，两个 manifest 均确认版本 `2.2.3`、提交
+  `6169d28f1769556f7f891007256ebb59c3be3d85`，平台分别为 `windows-x64` 和
+  `macos-arm64`。
+- 已下载全部线上资产；mac_byte 和 Windows 的 SHA256 清单全部匹配，两个 ZIP
+  完整性、DMG `hdiutil verify`、macOS app ad-hoc 严格签名、主程序 smoke、Coach
+  smoke、包内 `VERSION` 与 plist 版本均通过；主程序和 Coach 均为 arm64。
+- 在线 SHA256：
+  - mac_byte ZIP：`c8f419ce38899e27d82b62d33c560636c54b8004c953dc19f244f574976decae`
+  - mac_byte DMG：`d0076f7302c7c6bb938a2e3ae413bfeca44c04246c8b60d3da7aee8f8822716d`
+  - Windows 便携 ZIP：`60f213f33d0051110bffa2660d1666db93b78014dc207db9c408b13ae5aa3628`
+  - Windows 安装包：`6a98a6a5929d1fa0519819c29f904c5093842de693ae4e35841e47634daf8ab5`
 
 ## 已实现的 2.0 架构
 
