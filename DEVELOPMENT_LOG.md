@@ -450,8 +450,11 @@ Windows CI 兼容修复及 `v2.0.3` Tag 提交：`ce59731`。
 
 ## 2026-10-14 tmux 与 Homebrew 前置修复
 
-状态：本地开发中；按用户要求通过 PR 提交并在 CI 成功后自行合并，不直接推 main。
+状态：实现与验证完成；PR
+[#1](https://github.com/xinna2001/Seele/pull/1) 的 Windows、macOS、Ubuntu
+跨平台 CI 均已通过，按用户要求由维护者合并，不直接推 main。
 分支：`fix/mac-byte-homebrew-tmux-bootstrap`。
+首个实现提交：`69dca28`。
 共同作者：Cary Cao（GitHub `Carycmj`）。
 
 ### 问题结论
