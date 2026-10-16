@@ -40,6 +40,7 @@ Botmux 扩展位于 [`botmux-skill/`](botmux-skill/)，不需要修改 Botmux �
 - `Seele-<version>-windows-x64-portable.zip`：Windows 便携版；
 - `Seele-<version>-mac_byte-macos-arm64.dmg`：字节内部 Apple Silicon 安装版；
 - `Seele-<version>-mac_byte-macos-arm64.zip`：字节内部 Apple Silicon 压缩包；
+- `Seele-mac_byte-macos-arm64.dmg` / `.zip`：内容与对应版本文件相同的稳定别名，供文档通过 GitHub `releases/latest/download` 永久链接到最新版；
 - `SHA256SUMS-*.txt`：发布文件的 SHA-256 校验值；
 - `release-manifest-*.json`：版本、发行类型、提交和构建时间。
 

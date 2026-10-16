@@ -300,6 +300,11 @@ jobs:
             -format UDZO \
             "$dmg_path"
 
+          # Keep stable aliases so documentation can point at GitHub's
+          # /releases/latest/download/ URL without embedding a version number.
+          cp "$zip_path" "release/Seele-mac_byte-macos-arm64.zip"
+          cp "$dmg_path" "release/Seele-mac_byte-macos-arm64.dmg"
+
           cat > release/release-manifest-mac_byte.json <<EOF
           {
             "product": "Seele",
@@ -317,6 +322,8 @@ jobs:
             shasum -a 256 \
               "Seele-${APP_VERSION}-mac_byte-macos-arm64.zip" \
               "Seele-${APP_VERSION}-mac_byte-macos-arm64.dmg" \
+              Seele-mac_byte-macos-arm64.zip \
+              Seele-mac_byte-macos-arm64.dmg \
               release-manifest-mac_byte.json \
               > SHA256SUMS-mac_byte.txt
           )
@@ -372,6 +379,7 @@ jobs:
           - \`Seele-${VERSION}-windows-x64-portable.zip\`：Windows 便携版
           - \`Seele-${VERSION}-mac_byte-macos-arm64.dmg\`：字节内部 Apple Silicon 安装版
           - \`Seele-${VERSION}-mac_byte-macos-arm64.zip\`：字节内部 Apple Silicon 压缩包
+          - \`Seele-mac_byte-macos-arm64.dmg\` / \`.zip\`：供文档长期引用、始终指向当前 Release 的稳定文件名
           - \`SHA256SUMS-*.txt\`：文件完整性校验
 
           ### 说明
