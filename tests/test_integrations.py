@@ -341,6 +341,10 @@ class MacByteBootstrapTests(unittest.TestCase):
         )
         self.assertIn(mac_byte_bootstrap.HOMEBREW_INSTALL_URL, script)
         self.assertIn('/bin/bash -c "$homebrew_installer"', script)
+        self.assertIn(
+            "--homebrew-install -- /bin/bash -c \"$homebrew_installer\"",
+            script,
+        )
         self.assertNotIn("NONINTERACTIVE=1 /bin/bash -c", script)
         self.assertIn("HOMEBREW_NO_AUTO_UPDATE=1 brew install tmux", script)
         self.assertIn("tmux -V", script)
@@ -453,6 +457,7 @@ class MacByteBootstrapTests(unittest.TestCase):
             line
             for line in script.splitlines()
             if "--botmux-setup-coach" in line and "--login-command" not in line
+            and "--homebrew-install" not in line
         ]
         self.assertEqual(len(botmux_setup_lines), 1)
         self.assertLess(
@@ -615,7 +620,13 @@ class MacByteBootstrapTests(unittest.TestCase):
         self.assertNotIn("traex login", script)
         self.assertNotIn("lark-cli auth", script)
         self.assertNotIn("agentbuddy login", script)
-        self.assertNotIn("--botmux-setup-coach", script)
+        botmux_setup_lines = [
+            line
+            for line in script.splitlines()
+            if "--botmux-setup-coach" in line
+            and "--homebrew-install" not in line
+        ]
+        self.assertEqual(botmux_setup_lines, [])
 
     @unittest.skipUnless(sys.platform == "darwin", "requires /bin/zsh")
     def test_repair_script_executes_tmux_install_then_botmux_recovery(self):
@@ -802,6 +813,28 @@ class MacByteBootstrapTests(unittest.TestCase):
         )
         self.assertIn("--login-command -- traex login --sso-device", command)
 
+    @unittest.skipUnless(sys.platform == "darwin", "macOS bundle path test")
+    def test_frozen_homebrew_install_uses_console_helper(self):
+        resources = Path("/Applications/Seele.app/Contents/Resources")
+        with (
+            patch.object(mac_byte_bootstrap.sys, "frozen", True, create=True),
+            patch.object(
+                mac_byte_bootstrap,
+                "app_path",
+                side_effect=lambda *parts: resources.joinpath(*parts),
+            ),
+        ):
+            command = mac_byte_bootstrap._homebrew_install_command()
+
+        self.assertIn(
+            "/Applications/Seele.app/Contents/Resources/bin/SeeleBotmuxCoach",
+            command,
+        )
+        self.assertIn(
+            "--homebrew-install -- /bin/bash -c \"$homebrew_installer\"",
+            command,
+        )
+
     def test_botmux_configuration_requires_a_nonempty_catalog(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
@@ -938,6 +971,7 @@ class PlatformPathTests(unittest.TestCase):
     "macOS translucent rendering test requires PyQt5",
 )
 class MacByteRenderingTests(unittest.TestCase):
+
     def test_movie_label_replaces_transparent_pixels_between_frames(self):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         from PyQt5.QtCore import Qt

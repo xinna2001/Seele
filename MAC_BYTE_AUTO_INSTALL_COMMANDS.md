@@ -1,6 +1,6 @@
 # mac_byte 自动安装命令清单
 
-本文记录 Seele `v2.2.3` 中 `mac_byte` 首次启动实际执行的命令。权威实现位于
+本文记录 Seele `v2.2.5` 中 `mac_byte` 首次启动实际执行的命令。权威实现位于
 `mac_byte_bootstrap.py` 和 `botmux_setup_coach.py`。
 
 ## 触发模式
@@ -53,7 +53,7 @@ if ! command -v tmux >/dev/null 2>&1; then
       curl -fsSL \
         https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh
     )"
-    /bin/bash -c "$installer"
+    SeeleBotmuxCoach --homebrew-install -- /bin/bash -c "$installer"
     # 按 Apple Silicon / Intel 实际路径加载 brew shellenv。
   fi
   HOMEBREW_NO_AUTO_UPDATE=1 brew install tmux
@@ -62,8 +62,11 @@ tmux -V
 ```
 
 Homebrew 已存在或 `tmux` 已存在时直接跳过对应安装。全新 Mac 首次安装 Homebrew
-通常需要管理员密码和一次确认，因此保留官方交互流程，不模拟密码或回车。权限确认完成
-后脚本自动继续安装 tmux；安装失败则保留终端错误，不会启动缺少 tmux 的 Botmux daemon。
+通常需要管理员密码：出现 `Password:` 时播放语音，密码仍由用户直接输入，helper
+不读取、不保存、不代填。官方安装器输出
+`Press RETURN/ENTER to continue or any other key to abort:` 时自动按回车；出现明确的
+`[Y/n]` 或 `[y/N]` 提示时自动输入 `y`。未知提示不会自动回答。权限确认完成后脚本
+自动继续安装 tmux；安装失败则保留终端错误，不会启动缺少 tmux 的 Botmux daemon。
 
 ## Botmux 运行恢复
 
@@ -229,8 +232,13 @@ SEELE_RESOURCES_DIR="<APP_RESOURCES>" \
 - 用户输入原样转发，不记录邮箱、验证码或 App Secret；
 - 根据当前真实提示播放对应的 16 kHz WAV；
 - 扫码由 Botmux 自己轮询，只有 Botmux 输出下一步提示后才继续；
+- 自动回车选择“一次扫码创建新应用”；
+- 登录态失效时自动选择唯一的“重新扫码”；
+- 普通创建失败时自动选择默认的“返回应用来源”，不擅自进入兼容模式；
+- 手动凭证路径自动选择“飞书（中国版）”；
 - 检测到 CLI 菜单后按文字筛选并选择 `TRAE (CoCo) -> traex`；
 - 检测到工作目录模式和目录输入后，自动回车接受 Botmux 默认值；
+- 账号确认、机器人名称、管理员邮箱和应用凭证仍由用户处理；
 - 不使用固定等待秒数，不对未知提示自动输入。
 
 仅配置模式直接从该 PTY 配置步骤开始，不重复安装或登录前三个工具。若已有有效

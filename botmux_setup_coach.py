@@ -30,12 +30,6 @@ class VoiceCue:
 
 VOICE_CUES = (
     VoiceCue(
-        "app_source",
-        "mac_byte_botmux_app_source_16k.wav",
-        "请选择飞书应用来源。建议选择“一次扫码创建新应用”。",
-        ("飞书应用来源",),
-    ),
-    VoiceCue(
         "name",
         "mac_byte_botmux_name_16k.wav",
         "请为你的机器人取一个想要的名字。输入后按回车",
@@ -60,28 +54,10 @@ VOICE_CUES = (
         ("管理员 (owner):",),
     ),
     VoiceCue(
-        "relogin",
-        "mac_byte_botmux_relogin_16k.wav",
-        "上次的飞书登录状态已经失效，请选择“重新扫码”。",
-        ("上次飞书登录态已失效或无法确认账号",),
-    ),
-    VoiceCue(
         "existing_app",
         "mac_byte_botmux_existing_app_16k.wav",
         "请选择你要绑定的已有飞书应用。",
         ("\n 选择已有应用\n",),
-    ),
-    VoiceCue(
-        "compatibility",
-        "mac_byte_botmux_compatibility_16k.wav",
-        "自动创建应用失败。建议先选择“返回应用来源”并重试；只有普通方式持续失败时，再选择兼容模式。",
-        ("是否使用兼容模式？",),
-    ),
-    VoiceCue(
-        "tenant",
-        "mac_byte_botmux_tenant_16k.wav",
-        "请选择租户类型。字节员工请选择“飞书中国版”。",
-        ("租户类型",),
     ),
     VoiceCue(
         "app_id",
@@ -95,6 +71,13 @@ VOICE_CUES = (
         "请输入同一个飞书应用的 App Secret。请不要把密钥发送给他人。",
         ("AppSecret:", "的 AppSecret（留空返回上一步）:"),
     ),
+)
+
+HOMEBREW_PASSWORD_CUE = VoiceCue(
+    "homebrew_password",
+    "mac_byte_homebrew_password_16k.wav",
+    "安装 tmux 需要管理员权限。请输入这台电脑的开机密码，输入时屏幕不会显示字符，输入完成后按回车。",
+    ("Password:",),
 )
 
 BOTMUX_VOICE_FILES = {cue.key: cue.filename for cue in VOICE_CUES}
@@ -274,6 +257,50 @@ class CompositeCoach:
                 finish(exit_code)
 
 
+class HomebrewInstallCoach:
+    """Guide Homebrew's password prompt and accept only known confirmations."""
+
+    _YES_NO_PROMPT_RE = re.compile(
+        r"(?:^|\n)[^\n]*\[(?:Y/n|y/N)\]\s*:?\s*$"
+    )
+
+    def __init__(self, on_cue: Callable[[VoiceCue], None] | None = None):
+        self._decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        self._buffer = ""
+        self._password_prompt_count = 0
+        self._fired_actions: set[str] = set()
+        self._on_cue = on_cue or (lambda cue: None)
+
+    def feed(self, data: bytes) -> list[bytes]:
+        decoded = self._decoder.decode(data)
+        self._buffer = strip_terminal_control((self._buffer + decoded)[-24000:])
+
+        password_prompt_count = self._buffer.count("Password:")
+        if password_prompt_count > self._password_prompt_count:
+            self._password_prompt_count = password_prompt_count
+            self._on_cue(HOMEBREW_PASSWORD_CUE)
+
+        actions: list[bytes] = []
+        continue_prompt = (
+            "Press RETURN/ENTER to continue or any other key to abort:"
+        )
+        if (
+            "continue" not in self._fired_actions
+            and continue_prompt in self._buffer
+        ):
+            self._fired_actions.add("continue")
+            actions.append(b"\r")
+
+        if (
+            "yes_no" not in self._fired_actions
+            and self._YES_NO_PROMPT_RE.search(self._buffer)
+        ):
+            self._fired_actions.add("yes_no")
+            actions.append(b"y\r")
+
+        return actions
+
+
 class PromptCoach:
     """Turn Botmux output into voice cues and narrowly scoped automatic input."""
 
@@ -296,6 +323,42 @@ class PromptCoach:
                 self._on_cue(cue)
 
         actions: list[bytes] = []
+        if (
+            "app_source" not in self._fired_actions
+            and "飞书应用来源" in self._buffer
+            and "一次扫码创建新应用（推荐）" in self._buffer
+            and "输入可搜索" in self._buffer
+        ):
+            self._fired_actions.add("app_source")
+            actions.append(b"\r")
+
+        if (
+            "relogin" not in self._fired_actions
+            and "上次飞书登录态已失效或无法确认账号" in self._buffer
+            and "重新扫码" in self._buffer
+            and "输入可搜索" in self._buffer
+        ):
+            self._fired_actions.add("relogin")
+            actions.append(b"\r")
+
+        if (
+            "compatibility_return" not in self._fired_actions
+            and "是否使用兼容模式？" in self._buffer
+            and "返回应用来源" in self._buffer
+            and "输入可搜索" in self._buffer
+        ):
+            self._fired_actions.add("compatibility_return")
+            actions.append(b"\r")
+
+        if (
+            "tenant" not in self._fired_actions
+            and "租户类型" in self._buffer
+            and "飞书（中国版）" in self._buffer
+            and "输入可搜索" in self._buffer
+        ):
+            self._fired_actions.add("tenant")
+            actions.append(b"\r")
+
         submenu = "选择 CLI 适配器 › TRAE (CoCo)"
         if (
             "cli_traex" not in self._fired_actions
@@ -488,12 +551,20 @@ def run_coached_command(
 def main(argv: Sequence[str] | None = None) -> int:
     args = list(argv or ())
     login_command = bool(args and args[0] == "--login-command")
+    homebrew_install = bool(args and args[0] == "--homebrew-install")
     if login_command:
         args = args[1:]
         if args and args[0] == "--":
             args = args[1:]
         if not args:
             raise RuntimeError("登录命令不能为空")
+        command = args
+    elif homebrew_install:
+        args = args[1:]
+        if args and args[0] == "--":
+            args = args[1:]
+        if not args:
+            raise RuntimeError("Homebrew 安装命令不能为空")
         command = args
     elif args:
         command = args
@@ -507,6 +578,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if login_command:
             coach = LoginUrlCoach()
+        elif homebrew_install:
+            coach = HomebrewInstallCoach(player.play)
         else:
             coach = CompositeCoach(
                 PromptCoach(player.play),

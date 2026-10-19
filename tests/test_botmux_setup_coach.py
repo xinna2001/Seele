@@ -150,21 +150,81 @@ class PromptCoachTests(unittest.TestCase):
             ["/usr/bin/open", "https://example.com/login"],
         )
 
-    def test_voice_cues_are_deduplicated_and_do_not_answer_for_user(self):
+    def test_user_decision_voice_cues_are_deduplicated(self):
         cues = []
         coach = botmux_setup_coach.PromptCoach(lambda cue: cues.append(cue.key))
 
-        self.assertEqual(
-            coach.feed(" 飞书应用来源\n".encode()),
-            [],
-        )
-        self.assertEqual(coach.feed(" 飞书应用来源\n".encode()), [])
+        self.assertEqual(coach.feed("机器人名称 [botmux-1]: ".encode()), [])
+        self.assertEqual(coach.feed("机器人名称 [botmux-1]: ".encode()), [])
         self.assertEqual(coach.feed("请用飞书 App 扫码登录".encode()), [])
-        self.assertEqual(cues, ["app_source", "scan"])
+        self.assertEqual(cues, ["name", "scan"])
+
+    def test_homebrew_coach_voices_password_and_accepts_known_prompts(self):
+        cues = []
+        coach = botmux_setup_coach.HomebrewInstallCoach(
+            lambda cue: cues.append(cue.key)
+        )
+
+        self.assertEqual(coach.feed(b"Pass"), [])
+        self.assertEqual(coach.feed(b"word:"), [])
+        self.assertEqual(cues, ["homebrew_password"])
+        self.assertEqual(
+            coach.feed(
+                b"\nPress RETURN/ENTER to continue or any other key to abort:"
+            ),
+            [b"\r"],
+        )
+        self.assertEqual(
+            coach.feed(b"\nContinue installation? [Y/n] "),
+            [b"y\r"],
+        )
+        self.assertEqual(coach.feed(b"\nContinue installation? [Y/n] "), [])
+
+    def test_homebrew_coach_does_not_answer_unknown_questions(self):
+        coach = botmux_setup_coach.HomebrewInstallCoach()
+
+        self.assertEqual(coach.feed(b"Continue installation? (yes/no): "), [])
+        self.assertEqual(coach.feed(b"Delete existing files? [yes/no]: "), [])
 
     def test_fixed_choices_follow_prompt_text_instead_of_menu_positions(self):
         coach = botmux_setup_coach.PromptCoach()
 
+        self.assertEqual(
+            coach.feed(
+                (
+                    " 飞书应用来源\n"
+                    " 一次扫码创建新应用（推荐）\n"
+                    " 输入可搜索\n"
+                ).encode()
+            ),
+            [b"\r"],
+        )
+        self.assertEqual(
+            coach.feed(
+                (
+                    " 上次飞书登录态已失效或无法确认账号\n"
+                    " 重新扫码\n"
+                    " 输入可搜索\n"
+                ).encode()
+            ),
+            [b"\r"],
+        )
+        self.assertEqual(
+            coach.feed(
+                (
+                    " 是否使用兼容模式？\n"
+                    " 返回应用来源\n"
+                    " 输入可搜索\n"
+                ).encode()
+            ),
+            [b"\r"],
+        )
+        self.assertEqual(
+            coach.feed(
+                " 租户类型\n 飞书（中国版）\n 输入可搜索\n".encode()
+            ),
+            [b"\r"],
+        )
         self.assertEqual(
             coach.feed(" 选择 CLI 适配器\n 输入可搜索\n".encode()),
             [b"TRAE\r"],
@@ -186,6 +246,19 @@ class PromptCoachTests(unittest.TestCase):
             [b"\r"],
         )
 
+    def test_prompt_coach_leaves_identity_and_secrets_to_user(self):
+        coach = botmux_setup_coach.PromptCoach()
+
+        for prompt in (
+            "机器人名称 [botmux-1]: ",
+            "确认飞书账号：张三 · 字节跳动\n 输入可搜索\n",
+            "管理员 (owner): ",
+            "AppID (cli_xxx): ",
+            "AppSecret: ",
+        ):
+            with self.subTest(prompt=prompt):
+                self.assertEqual(coach.feed(prompt.encode()), [])
+
     def test_existing_app_cue_does_not_fire_for_source_menu_item(self):
         cues = []
         coach = botmux_setup_coach.PromptCoach(lambda cue: cues.append(cue.key))
@@ -197,9 +270,9 @@ class PromptCoachTests(unittest.TestCase):
                 " 选择已有应用  飞书 Web 登录列出应用\n"
             ).encode()
         )
-        self.assertEqual(cues, ["app_source"])
+        self.assertEqual(cues, [])
         coach.feed("\n 选择已有应用\n 输入可搜索\n".encode())
-        self.assertEqual(cues, ["app_source", "existing_app"])
+        self.assertEqual(cues, ["existing_app"])
 
 
 @unittest.skipUnless(os.name == "posix", "PTY integration requires POSIX")
@@ -253,11 +326,15 @@ def ask(screen):
     sys.stdout.flush()
     return sys.stdin.readline().strip()
 
+source = ask("\x1b[1m 飞书应用来源\x1b[0m\n 一次扫码创建新应用（推荐）\n 输入可搜索\n")
+relogin = ask("\x1b[1m 上次飞书登录态已失效或无法确认账号\x1b[0m\n 重新扫码\n 输入可搜索\n")
+compatibility = ask("\x1b[1m 是否使用兼容模式？\x1b[0m\n 返回应用来源\n 输入可搜索\n")
+tenant = ask("\x1b[1m 租户类型\x1b[0m\n 飞书（中国版）\n 输入可搜索\n")
 top = ask("\x1b[1m 选择 CLI 适配器\x1b[0m\n 输入可搜索\n")
 sub = ask("\x1b[1m 选择 CLI 适配器 › TRAE (CoCo)\x1b[0m\n 输入可搜索\n")
 mode = ask("\x1b[1m 新话题工作目录\x1b[0m\n 输入可搜索\n")
 directory = ask("默认工作目录（新话题直接在此目录启动）[~]: ")
-print(f"RESULT={top}|{sub}|{mode}|{directory}")
+print(f"RESULT={source}|{relogin}|{compatibility}|{tenant}|{top}|{sub}|{mode}|{directory}")
 """
         input_master, input_slave = pty.openpty()
         output_read, output_write = os.pipe()
@@ -275,7 +352,40 @@ print(f"RESULT={top}|{sub}|{mode}|{directory}")
         output = os.read(output_read, 65536).decode("utf-8", errors="replace")
 
         self.assertEqual(code, 0)
-        self.assertIn("RESULT=TRAE|traex||", output)
+        self.assertIn("RESULT=||||TRAE|traex||", output)
+
+    def test_homebrew_child_receives_only_known_confirmations(self):
+        import pty
+
+        child_script = r"""
+import sys
+
+def ask(screen):
+    sys.stdout.write(screen)
+    sys.stdout.flush()
+    return sys.stdin.readline().strip()
+
+enter = ask("Press RETURN/ENTER to continue or any other key to abort:")
+yes = ask("Continue installation? [y/N] ")
+print(f"RESULT={enter}|{yes}")
+"""
+        input_master, input_slave = pty.openpty()
+        output_read, output_write = os.pipe()
+        self.addCleanup(os.close, input_master)
+        self.addCleanup(os.close, input_slave)
+        self.addCleanup(os.close, output_read)
+
+        code = botmux_setup_coach.run_coached_command(
+            [sys.executable, "-c", child_script],
+            coach=botmux_setup_coach.HomebrewInstallCoach(),
+            stdin_fd=input_slave,
+            stdout_fd=output_write,
+        )
+        os.close(output_write)
+        output = os.read(output_read, 65536).decode("utf-8", errors="replace")
+
+        self.assertEqual(code, 0)
+        self.assertIn("RESULT=|y", output)
 
 
 if __name__ == "__main__":

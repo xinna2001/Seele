@@ -34,6 +34,7 @@ BOOTSTRAP_COMMANDS = (
 
 VOICE_FILES = {
     "install": "mac_byte_install_16k.wav",
+    "homebrew_password": "mac_byte_homebrew_password_16k.wav",
     "traex_login": "mac_byte_traex_login_16k.wav",
     "lark_config": "mac_byte_lark_config_16k.wav",
     "lark_login": "mac_byte_lark_login_16k.wav",
@@ -279,7 +280,8 @@ else
       printf '\\nHomebrew 安装脚本下载失败，请检查网络后重试。\\n' >&2
       exit 1
     }}
-    /bin/bash -c "$homebrew_installer"
+    ensure_login_audio
+    {_homebrew_install_command()}
     unset homebrew_installer
     export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
     if [ -x /opt/homebrew/bin/brew ]; then
@@ -405,6 +407,17 @@ def _coach_helper_base_command() -> list[str]:
 
 def _botmux_coach_command() -> str:
     return shlex.join(_coach_helper_base_command())
+
+
+def _homebrew_install_command() -> str:
+    command = shlex.join([
+        *_coach_helper_base_command(),
+        "--homebrew-install",
+        "--",
+        "/bin/bash",
+        "-c",
+    ])
+    return f'{command} "$homebrew_installer"'
 
 
 def _login_command(*command: str) -> str:

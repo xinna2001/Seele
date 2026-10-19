@@ -693,6 +693,57 @@ PR 的 Windows、macOS、Ubuntu 跨平台 CI 均已通过。
   - Windows 便携 ZIP：`5796cac39ddd791496ade0c5261cabc9b7be390d9fe8baa42a0038aebd925734`
   - Windows 安装包：`d1f95a1984c2149ecb7f93213b1d15bbcbe77966f8227745b50596ae4bf0837c`
 
+## 2026-10-19 v2.2.5 Homebrew 密码语音与确定性选项自动化
+
+状态：已完成本地实现、完整验证和 Apple Silicon VIP 包；用户已确认发布，进入
+`v2.2.5` 正式发布流程。
+
+### 问题结论
+
+1. 全新 Mac 安装 tmux 时会先进入 Homebrew 官方安装器。`sudo` 输出 `Password:`
+   后原流程没有语音，用户不知道需要输入电脑开机密码，且密码输入时终端不会回显。
+2. Homebrew 当前官方确认提示是
+   `Press RETURN/ENTER to continue or any other key to abort:`。该提示必须发送回车；
+   输入 `Y` 会被视为“任意其他键”并中止。实现仅在真正的 `[Y/n]` 或 `[y/N]`
+   提示中发送 `y`。
+3. Botmux `3.43.0` 的应用来源、失效登录态重新扫码、失败返回和中国飞书租户都有
+   确定默认项；账号确认、机器人名称、管理员邮箱和 App 凭证仍需要用户判断或输入。
+
+### 实现内容
+
+1. console helper 新增 `--homebrew-install` 模式，在 PTY 中运行 Homebrew 官方脚本；
+   检测到 `Password:` 时播放独立语音，但密码始终由用户直接输入且不记录。
+2. Homebrew helper 对官方 `RETURN/ENTER` 文案自动按回车，对明确的 `[Y/n]` /
+   `[y/N]` 自动输入 `y`，未知问题不自动回答。
+3. Botmux coach 按提示文字自动选择“一次扫码创建新应用”、唯一的“重新扫码”、
+   默认的“返回应用来源”和“飞书（中国版）”，不依赖菜单序号。
+4. 自动项不再播放要求用户手动选择的旧语音；身份、名称、邮箱和密钥提示仍保留。
+5. 新增 `mac_byte_homebrew_password_16k.wav`，格式为 16 kHz、Int16、双声道 WAV；
+   版本号升级为 `2.2.5`，同步更新更新记录、语音说明和安装命令文档。
+
+### 本地验证
+
+- Homebrew 官方脚本 SHA256：
+  `5f333bbe53bc490e51e7ccb1df8779b3dd6ee73a1a7379efda216edb08ccb148`；
+  已复核 `wait_for_user` 只接受 CR/LF。
+- Homebrew 和 Botmux 自动输入均有真实 PTY 子进程测试；敏感输入不自动回答测试通过。
+- 定向测试 `tests.test_botmux_setup_coach` 与
+  `tests.test_integrations.MacByteBootstrapTests`：41 项通过。
+- 实际构建 `.venv` 的 Python 全量单元测试：53 项通过；定向 `compileall` 通过。
+- Conda `Seele` 环境的全量 `compileall` 通过；单元测试仅透明渲染用例因该环境缺少
+  `PyQt5.QtCore` 无法导入，实际构建 `.venv` 中同一用例已单独通过。
+- Botmux 插件 build、validate 和 MCP smoke 通过；`git diff --check` 通过。
+- `full`、`setup` 和 `repair` 三种生成脚本均通过 `/bin/zsh -n`。
+- 新语音经 `afinfo` 确认为 2 声道、16000 Hz、Int16，时长 10.6195 秒。
+- Apple Silicon `.app` 和 console helper 均为 arm64；包内版本、plist short/build
+  version 均为 `2.2.5`；ad-hoc 严格签名、主程序 smoke、coach 路径 smoke 和
+  Homebrew helper 模式 smoke 全部通过。
+- VIP ZIP 已通过完整性检查，并从全新解压目录重复通过签名、版本、架构、语音资源
+  和全部 smoke：
+  `vip-packages/Seele-2.2.5-vip-test-mac_byte-macos-arm64.zip`。
+- VIP ZIP SHA256：
+  `da2a562286d62cad3796e1b633a3f079ad05aeb40338eb0801f8cc6d747ed742`。
+
 ## 已实现的 2.0 架构
 
 - `Seele.py`：PyQt 桌宠、托盘菜单、气泡和 Botmux 状态展示。
@@ -727,9 +778,9 @@ git diff --check
 
 ## 后续待验收
 
-1. 在全新字节 Apple Silicon 电脑验证 `v2.2.4` 完整安装和失败续跑。
+1. 在全新字节 Apple Silicon 电脑验证 `v2.2.5` 完整安装和失败续跑。
 2. 验证 Trae、Lark CLI、AgentBuddy 的真实首次登录和自动续跑。
-3. 验证 Botmux 扫码、语音提示、`traex` 自动选择和默认目录自动确认。
+3. 验证 Homebrew 密码语音、自动确认、Botmux 扫码及全部确定性默认项。
 4. 普通公网 macOS 版本、Developer ID 签名和公证仍未完成。
 
 ## 新话题恢复步骤
@@ -737,5 +788,5 @@ git diff --check
 1. 先阅读本文件和 `.trae/skills/seele-botmux/SKILL.md`。
 2. 运行 `git status --short --branch`，保护所有本地未提交修改。
 3. 不以远端 Release 安装包覆盖当前工作区的未提交修改。
-4. 按“后续待验收”在全新字节 Apple Silicon 电脑验证 `v2.2.4`，不要重复创建
-   Tag 或发布安装包。
+4. 按“后续待验收”在全新字节 Apple Silicon 电脑继续验证当前正式版本；再次发布前
+   先确认工作区、Tag 和线上 Release 状态，避免覆盖未提交修改或重复创建版本。

@@ -363,9 +363,12 @@ jobs:
           - Node.js、npm、tmux、Trae CLI、Lark CLI、AgentBuddy 和 Botmux 独立检测，已有兼容组件不重复安装。
           - Trae CLI 额外校验 backend cn 能力；旧版本命令虽存在但能力不兼容时自动升级并复核。
           - tmux 缺失时自动通过已有 Homebrew 安装；Homebrew 缺失时先运行官方安装器。
+          - Homebrew 首次安装出现管理员密码提示时播放语音说明；密码仍由用户直接输入且不会被记录。
+          - Homebrew 官方回车确认和明确的 Y/N 选择由 PTY helper 自动处理，未知提示保持人工确认。
           - Trae CLI、Lark CLI 和 AgentBuddy 在本人授权后自动校验并继续。
           - Lark CLI 应用初始化每轮只执行一次，并以本机配置读回作为成功判据；未落盘时提示重启续跑。
           - Botmux 根据当前真实提示播放语音，固定自动选择 traex 和默认工作目录。
+          - Botmux setup 自动处理创建新应用、重新扫码、返回应用来源和中国飞书租户等确定性选项；身份、名称、邮箱和凭证仍由用户处理。
           - macOS 安装包固定从 Contents/Resources 启动 Botmux coach，并在发布前执行包内路径自检。
           - 普通登录语音与浏览器授权并行；旧记录后台清理，链接超时或失败时才前置 Terminal。
           - Botmux 交互配置继续前置 Terminal，保留名称、邮箱和菜单操作入口。
