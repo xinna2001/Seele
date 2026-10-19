@@ -764,8 +764,8 @@ PR 的 Windows、macOS、Ubuntu 跨平台 CI 均已通过。
 
 ## 2026-10-19 v2.2.6 角色窗口响应式布局与关闭入口
 
-状态：已完成本地实现、完整验证、像素截图检查和 Apple Silicon VIP 包；`v2.2.5`
-已通过线上验收，进入 `v2.2.6` 正式发布流程。
+状态：已提交并推送 `main`，已创建 `v2.2.6` Tag 和 GitHub Release；本地、
+跨平台 CI、线上构建、latest 别名及下载复核均通过。
 
 ### 问题结论
 
@@ -801,6 +801,28 @@ PR 的 Windows、macOS、Ubuntu 跨平台 CI 均已通过。
   `vip-packages/Seele-2.2.6-vip-test-mac_byte-macos-arm64.zip`。
 - VIP ZIP SHA256：
   `0b6d5698b31ccd0f769993a1e0114f659243d071164fc2c2016fa6f58621daea`。
+
+### 线上发布验证
+
+- 发布提交：`04a00f7`。
+- `main` 跨平台测试工作流 `39257471075`：Windows、macOS、Ubuntu 全部成功。
+- `v2.2.6` 跨平台测试工作流 `39257656513`：Windows、macOS、Ubuntu 全部成功。
+- `v2.2.6` 打包发布工作流 `39257656618`：Windows、mac_byte 打包、smoke、
+  资产上传及 GitHub Release 发布全部成功。
+- Release：`https://github.com/xinna2001/Seele/releases/tag/v2.2.6`，包含 10 个预期资产；
+  GitHub latest 已指向 `v2.2.6`。
+- 在线 manifest 确认版本为 `2.2.6`、提交为
+  `04a00f7ef08280abf6cd1c9b0d3feb0fe697d205`、平台为 `macos-arm64`。
+- `releases/latest/download/Seele-mac_byte-macos-arm64.zip` 已重定向到 `v2.2.6`
+  的稳定别名资产，版本化与稳定别名的 GitHub digest 一致。
+- 已重新下载在线 macOS ZIP 与 DMG；两个文件的发布 SHA256、ZIP 完整性、
+  `hdiutil verify`、ad-hoc 严格签名、主程序 smoke、包内 `VERSION`、plist short/build
+  version 均为 `2.2.6`；主程序和 Coach 均为 arm64。
+- 在线 SHA256：
+  - mac_byte ZIP：`aeec9164d670fd99cbdcda2d29180eed95029b9fe0c4d2ab801dc9593c1c4678`
+  - mac_byte DMG：`d5f0b1c9d1f770245cba04550229d3ff2a88ebc5bed504c8dd096f1d006cb4f1`
+  - Windows 便携 ZIP：`eeeaef5205aa5eb1d866368f61ac4ec542c68aa8cee4427ac89bfb53263581eb`
+  - Windows 安装包：`1e1843d933c72148e9aabcfa1ae8af4a2c176f8150f63b252490595dae8540f7`
 
 ## 已实现的 2.0 架构
 
