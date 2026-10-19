@@ -695,8 +695,8 @@ PR 的 Windows、macOS、Ubuntu 跨平台 CI 均已通过。
 
 ## 2026-10-19 v2.2.5 Homebrew 密码语音与确定性选项自动化
 
-状态：已完成本地实现、完整验证和 Apple Silicon VIP 包；用户已确认发布，进入
-`v2.2.5` 正式发布流程。
+状态：已提交并推送 `main`，已创建 `v2.2.5` Tag 和 GitHub Release；本地、
+跨平台 CI、线上构建及下载复核均通过。
 
 ### 问题结论
 
@@ -744,6 +744,64 @@ PR 的 Windows、macOS、Ubuntu 跨平台 CI 均已通过。
 - VIP ZIP SHA256：
   `da2a562286d62cad3796e1b633a3f079ad05aeb40338eb0801f8cc6d747ed742`。
 
+### 线上发布验证
+
+- 发布提交：`6a62ffd`。
+- `main` 跨平台测试工作流 `39256399189`：Windows、macOS、Ubuntu 全部成功。
+- `v2.2.5` 跨平台测试工作流 `39256639215`：Windows、macOS、Ubuntu 全部成功。
+- `v2.2.5` 打包发布工作流 `39256639374`：Windows、mac_byte 打包、smoke、
+  资产上传及 GitHub Release 发布全部成功。
+- Release：`https://github.com/xinna2001/Seele/releases/tag/v2.2.5`，包含 10 个预期资产。
+- 在线 manifest 确认版本为 `2.2.5`、提交为
+  `6a62ffdb7db6fafc5674d84cbec85c8441aa926c`、平台为 `macos-arm64`。
+- 已重新下载在线 macOS ZIP 与 DMG；两个文件的发布 SHA256、ZIP 完整性、
+  `hdiutil verify`、ad-hoc 严格签名、主程序 smoke 和包内 `VERSION=2.2.5` 均通过。
+- 在线 SHA256：
+  - mac_byte ZIP：`fe4dbab931e3f3410e391b271a1ed060260056dd8efbe95cba312a5e4d6557ca`
+  - mac_byte DMG：`7e83d0ba72fd99b4ddbc0c1dd45fdb40ea561628d6c8cfe30906a5fcbb286acf`
+  - Windows 便携 ZIP：`56334cc9babc6516f0c868a724e71ac70b1e2a52b3c35baab81d4558fc4d7df7`
+  - Windows 安装包：`30ccd0ed600a87913ac14f3fb32e9a4361dd566486c47bc7410ad73978937d40`
+
+## 2026-10-19 v2.2.6 角色窗口响应式布局与关闭入口
+
+状态：已完成本地实现、完整验证、像素截图检查和 Apple Silicon VIP 包；`v2.2.5`
+已通过线上验收，进入 `v2.2.6` 正式发布流程。
+
+### 问题结论
+
+1. `RoleSwitchWindow.main` 固定窗口 `800×750`、最小尺寸同样为 `800×750`，内部角色
+   卡片固定 `720×320`；macOS Retina 按逻辑像素渲染后会占据大部分屏幕。
+2. 角色窗口和后续音色说明弹窗都使用 `FramelessWindowHint`，系统标题栏和关闭按钮
+   被移除。代码虽然支持 `Esc`，但界面没有可见关闭入口，用户只能选择角色触发关闭。
+3. 三个角色按钮固定横排且高度为 82，在小屏窗口中没有重排规则。
+
+### 实现内容
+
+1. 新增屏幕可用区域计算：按当前角色窗口所属显示器或鼠标所在显示器选择尺寸并居中，
+   上限为 `640×460`，同时保留 32 像素安全边距。
+2. 角色窗口和音色说明弹窗新增右上角系统关闭图标；点击关闭或按 `Esc` 都不修改角色。
+3. 窗口宽度小于 480 时，三个角色按钮自动从横排切换为纵排，并同步重新计算卡片高度。
+4. 角色按钮改为明确的白底、蓝色边框和 18 像素文字，不再依赖 macOS 当前主题隐式
+   提供按钮边框。
+5. 音色说明弹窗同步改为响应式尺寸、紧凑字号与按钮高度，保留“知道了”操作。
+6. 版本号升级为 `2.2.6`，更新 `CHANGELOG.md` 和 mac_byte 命令文档版本。
+
+### 当前验证
+
+- 新增响应式尺寸纯函数测试，以及窗口不超出屏幕、横竖布局重排、关闭不写状态测试。
+- macOS/PyQt 定向渲染测试：3 项通过。
+- 已生成并检查默认 `496×408`、小屏 `420×360` 和音色说明三张像素截图：
+  关闭按钮均可见，角色名称完整，无按钮或文字重叠。
+- 实际构建 `.venv` 的 Python 全量单元测试：55 项通过；定向 `compileall` 通过。
+- Botmux 插件 build、validate 和 MCP smoke 通过；`git diff --check` 通过。
+- Apple Silicon `.app` 和 console helper 均为 arm64；包内版本、plist short/build
+  version 均为 `2.2.6`；ad-hoc 严格签名、主程序 smoke、coach 路径 smoke 和
+  Homebrew helper 模式 smoke 全部通过。
+- VIP ZIP 已通过完整性检查，并从全新解压目录重复通过签名、版本、架构和全部 smoke：
+  `vip-packages/Seele-2.2.6-vip-test-mac_byte-macos-arm64.zip`。
+- VIP ZIP SHA256：
+  `0b6d5698b31ccd0f769993a1e0114f659243d071164fc2c2016fa6f58621daea`。
+
 ## 已实现的 2.0 架构
 
 - `Seele.py`：PyQt 桌宠、托盘菜单、气泡和 Botmux 状态展示。
@@ -778,10 +836,11 @@ git diff --check
 
 ## 后续待验收
 
-1. 在全新字节 Apple Silicon 电脑验证 `v2.2.5` 完整安装和失败续跑。
+1. 在全新字节 Apple Silicon 电脑验证 `v2.2.6` 完整安装和失败续跑。
 2. 验证 Trae、Lark CLI、AgentBuddy 的真实首次登录和自动续跑。
 3. 验证 Homebrew 密码语音、自动确认、Botmux 扫码及全部确定性默认项。
-4. 普通公网 macOS 版本、Developer ID 签名和公证仍未完成。
+4. 验证角色窗口在实际 Retina 屏幕上的尺寸、关闭按钮和小屏重排。
+5. 普通公网 macOS 版本、Developer ID 签名和公证仍未完成。
 
 ## 新话题恢复步骤
 

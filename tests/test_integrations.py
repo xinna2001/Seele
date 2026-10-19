@@ -971,6 +971,74 @@ class PlatformPathTests(unittest.TestCase):
     "macOS translucent rendering test requires PyQt5",
 )
 class MacByteRenderingTests(unittest.TestCase):
+    def test_role_switch_window_size_scales_with_available_screen(self):
+        import RoleSwitchWindow
+
+        self.assertEqual(
+            RoleSwitchWindow._responsive_window_size(
+                1920,
+                1080,
+                preferred_width=640,
+                preferred_height=460,
+                minimum_width=360,
+                minimum_height=300,
+            ),
+            (640, 460),
+        )
+        compact = RoleSwitchWindow._responsive_window_size(
+            480,
+            320,
+            preferred_width=640,
+            preferred_height=460,
+            minimum_width=360,
+            minimum_height=300,
+        )
+        self.assertLessEqual(compact[0], 480 - 32)
+        self.assertLessEqual(compact[1], 320 - 32)
+
+    def test_role_switch_window_reflows_and_closes_without_selection(self):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PyQt5.QtWidgets import QApplication
+        import RoleSwitchWindow
+
+        app = QApplication.instance() or QApplication([])
+        window = RoleSwitchWindow.main()
+        window.show()
+        app.processEvents()
+
+        available = window.screen().availableGeometry()
+        self.assertLessEqual(window.width(), available.width() - 32)
+        self.assertLessEqual(window.height(), available.height() - 32)
+        self.assertTrue(window.close_button.isVisible())
+        self.assertEqual(window.close_button.toolTip(), "关闭")
+
+        window.resize(700, 460)
+        app.processEvents()
+        self.assertFalse(window._buttons_vertical)
+        horizontal_positions = [
+            window.buttons_layout.getItemPosition(
+                window.buttons_layout.indexOf(button)
+            )
+            for button in window._role_buttons
+        ]
+        self.assertEqual([position[0] for position in horizontal_positions], [0, 0, 0])
+
+        window.resize(420, 360)
+        app.processEvents()
+        self.assertTrue(window._buttons_vertical)
+        vertical_positions = [
+            window.buttons_layout.getItemPosition(
+                window.buttons_layout.indexOf(button)
+            )
+            for button in window._role_buttons
+        ]
+        self.assertEqual([position[1] for position in vertical_positions], [0, 0, 0])
+
+        with patch.object(RoleSwitchWindow.wf, "write_dict_to_json") as write_state:
+            window.close_button.click()
+            app.processEvents()
+        self.assertFalse(window.isVisible())
+        write_state.assert_not_called()
 
     def test_movie_label_replaces_transparent_pixels_between_frames(self):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
