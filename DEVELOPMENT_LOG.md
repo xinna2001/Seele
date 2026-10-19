@@ -624,7 +624,9 @@ PR 的 Windows、macOS、Ubuntu 跨平台 CI 均已通过。
 
 ## 2026-10-19 v2.2.4 Trae CLI PATH、提前结束续跑与二维码转发修复
 
-状态：本地修复和验证已完成，尚未提交、推送、打 Tag 或发布 Release。
+状态：已提交并推送 `main`，已创建 `v2.2.4` Tag 和 GitHub Release；
+本地、跨平台 CI、线上构建及下载复核均通过。
+发布提交：`eff3701`。
 
 ### 问题结论
 
@@ -670,6 +672,26 @@ PR 的 Windows、macOS、Ubuntu 跨平台 CI 均已通过。
   `vip-packages/Seele-2.2.4-vip-test-mac_byte-macos-arm64.zip`。
 - VIP ZIP SHA256：
   `c52015d4e5c632b5fcdd2dad1edfc45d41cf3c6c3482218bdfb19eb29a11c304`。
+
+### 线上发布验证
+
+- `main` 跨平台测试工作流 `39239202439`：Windows、macOS、Ubuntu 全部成功。
+- `v2.2.4` 跨平台测试工作流 `39239205955`：Windows、macOS、Ubuntu 全部成功。
+- `v2.2.4` 打包发布工作流 `39239205939`：Windows、mac_byte 打包、smoke、
+  资产上传及 GitHub Release 发布全部成功。
+- Release：
+  `https://github.com/xinna2001/Seele/releases/tag/v2.2.4`。
+- Release 包含 10 个预期资产；两个 manifest 均确认版本为 `2.2.4`、提交为
+  `eff3701b3b6f57552637396fb5ad1cd2cd2340c5`，平台分别为 `windows-x64` 和
+  `macos-arm64`。
+- 在线 macOS ZIP 与 DMG 已重新下载，并通过发布 SHA256、ZIP 完整性、
+  `hdiutil verify`、ad-hoc 严格签名、主程序 smoke 和 coach 路径 smoke；包内
+  `VERSION`、plist short/build version 均为 `2.2.4`，主程序和 Coach 均为 arm64。
+- 在线 SHA256：
+  - mac_byte ZIP：`3d21b0fe20e1621aca6b61195c9bd31262554675f35c5340a84ec02050375243`
+  - mac_byte DMG：`17e4d4cdc7ba8562d12e09f94377c125ada5ac1cb0489ec2cf2b1e4e3c632789`
+  - Windows 便携 ZIP：`5796cac39ddd791496ade0c5261cabc9b7be390d9fe8baa42a0038aebd925734`
+  - Windows 安装包：`d1f95a1984c2149ecb7f93213b1d15bbcbe77966f8227745b50596ae4bf0837c`
 
 ## 已实现的 2.0 架构
 
