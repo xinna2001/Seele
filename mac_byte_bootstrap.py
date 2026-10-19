@@ -76,6 +76,62 @@ def _state_dir(home: str | os.PathLike | None = None) -> Path:
     return path
 
 
+def status_path(home: str | os.PathLike | None = None) -> Path:
+    return _state_dir(home) / "bootstrap-status.json"
+
+
+def read_bootstrap_status(home: str | os.PathLike | None = None) -> dict:
+    try:
+        data = json.loads(status_path(home).read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def wait_for_bootstrap_result(
+    *,
+    home: str | os.PathLike | None = None,
+    poll_seconds: float = 1.0,
+) -> dict:
+    while True:
+        status = read_bootstrap_status(home)
+        if status.get("state") in {"completed", "failed"}:
+            return status
+        time.sleep(poll_seconds)
+
+
+def _applescript_string(value: str) -> str:
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def close_terminal_window_for_script(script_path: str | os.PathLike) -> bool:
+    if sys.platform != "darwin":
+        return False
+    title_fragment = Path(script_path).name
+    script = f"""
+tell application "Terminal"
+  repeat with terminalWindow in windows
+    if name of terminalWindow contains {_applescript_string(title_fragment)} then
+      close terminalWindow
+      return "closed"
+    end if
+  end repeat
+end tell
+return "not_found"
+""".strip()
+    try:
+        result = subprocess.run(
+            ["/usr/bin/osascript", "-e", script],
+            capture_output=True,
+            text=True,
+            timeout=8,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0 and "closed" in result.stdout
+
+
 def _command_path(command: str) -> str | None:
     direct = shutil.which(command)
     if direct:
@@ -273,6 +329,52 @@ fi
 """.strip()
 
 
+def _trae_cli_path_commands() -> str:
+    return """
+ensure_user_local_bin_path() {
+  mkdir -p "$HOME/.local/bin"
+  case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) export PATH="$HOME/.local/bin:$PATH" ;;
+  esac
+  for profile in "$HOME/.zprofile" "$HOME/.zshrc"; do
+    if [ -f "$profile" ]; then
+      if grep -F '$HOME/.local/bin' "$profile" >/dev/null 2>&1 ||
+         grep -F "$HOME/.local/bin" "$profile" >/dev/null 2>&1; then
+        continue
+      fi
+    fi
+    if [ -e "$profile" ] && [ ! -w "$profile" ]; then
+      printf '[提醒] 无法写入 %s；手动打开的终端可能需要先执行 export PATH="$HOME/.local/bin:$PATH"。\\n' "$profile" >&2
+      continue
+    fi
+    {
+      printf '\\n# Added by Seele mac_byte bootstrap: user-local CLI tools\\n'
+      printf 'export PATH="$HOME/.local/bin:$PATH"\\n'
+    } >> "$profile" 2>/dev/null || true
+  done
+}
+
+ensure_user_local_bin_path
+if command -v traex >/dev/null 2>&1; then
+  cat > "$HOME/.local/bin/trae-code" <<'EOF'
+#!/bin/sh
+if command -v traex >/dev/null 2>&1; then
+  exec traex "$@"
+fi
+if [ -x "$HOME/.local/bin/traex" ]; then
+  exec "$HOME/.local/bin/traex" "$@"
+fi
+printf '%s\\n' 'traex command not found. Please reopen Terminal or add $HOME/.local/bin to PATH.' >&2
+exit 127
+EOF
+  chmod 755 "$HOME/.local/bin/trae-code" 2>/dev/null || true
+  printf '[兼容] Trae CLI 旧命令 trae-code -> traex: %s\\n' "$HOME/.local/bin/trae-code"
+fi
+unset -f ensure_user_local_bin_path
+""".strip()
+
+
 def _shell_login_attention(stage_name: str) -> str:
     return f"prepare_login_attention {shlex.quote(stage_name)}"
 
@@ -349,6 +451,7 @@ npm -v
 {_tmux_install_commands()}
 
 {_traex_install_commands()}
+{_trae_cli_path_commands()}
 
 if command -v lark-cli >/dev/null 2>&1; then
   printf '[已安装] Lark CLI: %s\\n' "$(command -v lark-cli)"
@@ -503,6 +606,7 @@ SCRIPT_FILE={shlex.quote(str(script_path))}
 LOCK_FILE={shlex.quote(str(lock_path))}
 STATUS_FILE={shlex.quote(str(status_path))}
 TMP_STATUS="${{STATUS_FILE}}.tmp.$$"
+BOOTSTRAP_MODE={shlex.quote(mode)}
 ORIGINAL_OUTPUT_VOLUME=""
 ORIGINAL_OUTPUT_MUTED=""
 LOGIN_AUDIO_SNAPSHOT_TAKEN=0
@@ -574,9 +678,9 @@ finish() {{
   restore_login_audio
   finished_at="$(date +%s)"
   if [ "$code" -eq 0 ]; then
-    printf '{{"state":"completed","code":0,"updated_at":%s}}\\n' "$finished_at" > "$TMP_STATUS"
+    printf '{{"state":"completed","code":0,"mode":"%s","updated_at":%s}}\\n' "$BOOTSTRAP_MODE" "$finished_at" > "$TMP_STATUS"
   else
-    printf '{{"state":"failed","code":%s,"updated_at":%s}}\\n' "$code" "$finished_at" > "$TMP_STATUS"
+    printf '{{"state":"failed","code":%s,"mode":"%s","updated_at":%s}}\\n' "$code" "$BOOTSTRAP_MODE" "$finished_at" > "$TMP_STATUS"
   fi
   mv -f "$TMP_STATUS" "$STATUS_FILE" 2>/dev/null || true
   rm -f -- "$LOCK_FILE" "$SCRIPT_FILE" "$TMP_STATUS"

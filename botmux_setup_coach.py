@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import codecs
+import errno
 import os
 import re
+import select
 import shutil
 import signal
 import subprocess
@@ -167,6 +169,32 @@ def focus_terminal_for_login() -> bool:
     except (OSError, subprocess.SubprocessError):
         return False
     return result.returncode == 0
+
+
+def _write_all(fd: int, data: bytes, *, timeout_seconds: float = 5.0) -> None:
+    if not data:
+        return
+    deadline = time.monotonic() + timeout_seconds
+    view = memoryview(data)
+    written_total = 0
+    while written_total < len(view):
+        try:
+            written = os.write(fd, view[written_total:])
+        except BlockingIOError as exc:
+            written = getattr(exc, "characters_written", 0) or 0
+        except InterruptedError:
+            continue
+        except OSError as exc:
+            if exc.errno not in (errno.EAGAIN, errno.EWOULDBLOCK):
+                raise
+            written = 0
+        if written:
+            written_total += written
+            continue
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Terminal output remained unavailable")
+        select.select([], [fd], [], min(0.2, remaining))
 
 
 class LoginUrlCoach:
@@ -414,7 +442,7 @@ def run_coached_command(
                 except BlockingIOError:
                     user_data = b""
                 if user_data:
-                    os.write(master_fd, user_data)
+                    _write_all(master_fd, user_data)
 
             if master_fd in readable:
                 try:
@@ -424,9 +452,10 @@ def run_coached_command(
                         raise
                     output = b""
                 if output:
-                    os.write(output_fd, output)
-                    for automatic_input in prompt_coach.feed(output):
-                        os.write(master_fd, automatic_input)
+                    automatic_inputs = prompt_coach.feed(output)
+                    _write_all(output_fd, output)
+                    for automatic_input in automatic_inputs:
+                        _write_all(master_fd, automatic_input)
                 else:
                     break
             tick = getattr(prompt_coach, "tick", None)

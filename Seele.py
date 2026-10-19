@@ -2,6 +2,7 @@ import sys
 import os
 import random
 import threading
+import time
 
 # qt-material/qtpy picks the Qt binding at import time.
 # Set this as early as possible to ensure PyQt5 is selected.
@@ -492,22 +493,47 @@ class DesktopWife(QWidget):
         self._bootstrap_thread.start()
 
     def _run_mac_byte_bootstrap(self) -> None:
-        try:
-            mode = mac_byte_bootstrap.bootstrap_mode()
-            script = mac_byte_bootstrap.launch_bootstrap(mode=mode)
-            if script is None:
-                state = "ready" if mode == "ready" else "running"
-                self._integration_signals.bootstrap_event.emit({"state": state})
+        retries_left = 1
+        while True:
+            try:
+                mode = mac_byte_bootstrap.bootstrap_mode()
+                script = mac_byte_bootstrap.launch_bootstrap(mode=mode)
+                if script is None:
+                    state = "ready" if mode == "ready" else "running"
+                    self._integration_signals.bootstrap_event.emit({"state": state})
+                    return
+                self._integration_signals.bootstrap_event.emit({
+                    "state": "launched",
+                    "mode": mode,
+                })
+                status = mac_byte_bootstrap.wait_for_bootstrap_result()
+                if status.get("state") == "failed" and retries_left > 0:
+                    closed = mac_byte_bootstrap.close_terminal_window_for_script(script)
+                    retries_left -= 1
+                    self._integration_signals.bootstrap_event.emit({
+                        "state": "retrying",
+                        "mode": status.get("mode") or mode,
+                        "closed": closed,
+                    })
+                    time.sleep(1.5)
+                    continue
+                if status.get("state") == "failed":
+                    self._integration_signals.bootstrap_event.emit({
+                        "state": "error",
+                        "message": f"安装终端提前结束，退出码 {status.get('code', '未知')}",
+                    })
+                elif status.get("state") == "completed":
+                    self._integration_signals.bootstrap_event.emit({
+                        "state": "completed",
+                        "mode": status.get("mode") or mode,
+                    })
                 return
-            self._integration_signals.bootstrap_event.emit({
-                "state": "launched",
-                "mode": mode,
-            })
-        except (OSError, RuntimeError, ValueError) as exc:
-            self._integration_signals.bootstrap_event.emit({
-                "state": "error",
-                "message": str(exc),
-            })
+            except (OSError, RuntimeError, ValueError) as exc:
+                self._integration_signals.bootstrap_event.emit({
+                    "state": "error",
+                    "message": str(exc),
+                })
+                return
 
     def _handle_bootstrap_event(self, event: dict) -> None:
         state = event.get("state")
@@ -521,6 +547,14 @@ class DesktopWife(QWidget):
             self._show_bubble_text(text)
         elif state == "running":
             self._show_bubble_text("Botmux 安装终端已经打开。")
+        elif state == "retrying":
+            if event.get("closed"):
+                text = "安装终端提前结束，已关闭旧窗口并重新打开继续安装。"
+            else:
+                text = "安装终端提前结束，正在重新打开终端继续安装。"
+            self._show_bubble_text(text)
+        elif state == "completed":
+            self._show_bubble_text("Botmux 安装流程已完成。")
         elif state == "error":
             self._show_bubble_text(f"Botmux 安装启动失败：{event.get('message') or '未知错误'}")
 

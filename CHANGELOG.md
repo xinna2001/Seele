@@ -1,5 +1,15 @@
 # 更新记录
 
+## 2.2.4
+
+- mac_byte 安装 Trae CLI 后会把 `$HOME/.local/bin` 写入 zsh 启动文件，避免用户
+  手动打开新终端输入 `traex` 时因 PATH 未刷新而误判 CLI 未安装；同时附带
+  `trae-code -> traex` 兼容入口。
+- mac_byte 会监控外部安装 Terminal 的状态文件；发现脚本提前失败时，自动关闭对应
+  `.command` 窗口并重新打开一次终端续跑。
+- PTY helper 在转发登录二维码等大块终端输出时处理 `EAGAIN/BlockingIOError`，
+  先提取登录链接再回写终端，修复二维码只显示一半后 helper 崩溃的问题。
+
 ## 2.2.3
 
 - mac_byte 安装不再把“存在 `traex` 命令”等同于版本可用；旧版 Trae CLI 缺少

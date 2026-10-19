@@ -19,6 +19,9 @@ Seele 仅在 macOS 且 `EDITION=mac_byte` 时运行安装检测。启动时分�
 生成的 `~/.seele/mac_byte/bootstrap-<UUID>.command` 权限为 `0700`，通过
 `/usr/bin/open -a Terminal` 启动。脚本使用 `set -e`、`set -u` 和
 `set -o pipefail`；任何安装或校验命令失败都会停止后续步骤并写入失败状态。
+桌宠进程会继续监控 `bootstrap-status.json`；如果外部 `.command` 提前写入
+`failed`，会按本轮脚本 UUID 尝试关闭旧 Terminal 窗口，并自动重新启动一次安装
+状态机。重试只执行一次，避免网络、权限或账号问题导致无限循环。
 
 ## 完整安装
 
@@ -95,6 +98,16 @@ if ! command -v traex >/dev/null 2>&1 ||
         sh
 fi
 
+mkdir -p "$HOME/.local/bin"
+# 若 zsh 启动文件尚未包含用户本地 bin，则追加：
+export PATH="$HOME/.local/bin:$PATH"
+# 同时创建旧命令名兼容入口：
+cat > "$HOME/.local/bin/trae-code" <<'EOF'
+#!/bin/sh
+exec traex "$@"
+EOF
+chmod 755 "$HOME/.local/bin/trae-code"
+
 if ! command -v lark-cli >/dev/null 2>&1; then
   npm install -g @larksuite/cli@latest --registry https://bnpm.byted.org/
 fi
@@ -110,6 +123,11 @@ Seele 不再只按 `command -v traex` 判断 Trae CLI 可用。早期版本虽�
 命令，但没有 `backend` 子命令，会把 `backend` 当作提示词、再对 `cn` 报
 `unexpected argument`。安装前以无副作用的 `traex backend cn --help` 探测所需能力，
 不支持时调用官方安装脚本升级；升级后重复探测，仍不支持则停止，不进入登录阶段。
+`traex` 是当前安装链路使用的权威命令。为兼容用户按旧习惯手动输入
+`trae-code` 验证安装的场景，Seele 会在 `$HOME/.local/bin` 下创建一个转发到
+`traex` 的 `trae-code` shim，并尽量把 `$HOME/.local/bin` 写入 `.zprofile` 和
+`.zshrc`；如果用户的启动文件权限异常导致写入失败，安装流程会提示手动添加 PATH，
+但不会因此中断 Botmux 自动安装。
 
 内部 npm 源只传给对应安装命令，不执行 `npm config set registry`，因此不会永久
 修改用户的全局 npm 配置。安装后再次检查全部七个命令；任何一项仍无法解析都会停止，
@@ -123,10 +141,12 @@ Trae、Lark CLI 和 AgentBuddy 尚未完成、确实需要用户扫码或授权�
 2. 仅在静音或输出音量低于 `20%` 时，临时调整到 `20%` 并取消静音；
 3. 在 Terminal 仍处于后台时发送 ANSI `2J + 3J + H`，先清掉上一个阶段的链接；
 4. 在后台播放对应语音，不等待语音结束就通过 PTY helper 启动官方登录命令；
-5. PTY helper 保留原始终端输出，同时从完整输出行中提取首个有效 HTTPS 登录地址，
-   优先使用 Google Chrome 打开，Chrome 不可用时回退系统默认浏览器。
+5. PTY helper 先消费命令输出以提取 HTTPS 登录地址，再把原始输出回写到 Terminal；
+   链接会优先使用 Google Chrome 打开，Chrome 不可用时回退系统默认浏览器。
 6. 链接在 5 秒内没有出现，或登录命令失败时，才使用 AppleScript 将 Terminal
    激活到前台；不再次清屏，确保当前二维码和错误信息仍然可见。
+7. 终端输出遇到 macOS 临时不可写时会短暂等待并续写；等待有上限，避免二维码只显示
+   一半就因为 `BlockingIOError` 崩溃，也不会无限卡住。
 
 安装脚本的 `EXIT` trap 会在成功、失败或 Terminal 被关闭时恢复原输出音量和静音
 状态。已经登录或配置完成的阶段仍由状态命令直接跳过，不调整音量，也不抢占前台。

@@ -622,6 +622,55 @@ PR 的 Windows、macOS、Ubuntu 跨平台 CI 均已通过。
   - Windows 便携 ZIP：`60f213f33d0051110bffa2660d1666db93b78014dc207db9c408b13ae5aa3628`
   - Windows 安装包：`6a98a6a5929d1fa0519819c29f904c5093842de693ae4e35841e47634daf8ab5`
 
+## 2026-10-19 v2.2.4 Trae CLI PATH、提前结束续跑与二维码转发修复
+
+状态：本地修复和验证已完成，尚未提交、推送、打 Tag 或发布 Release。
+
+### 问题结论
+
+1. 用户截图显示 Trae CLI 登录二维码只输出了一部分，随后 `SeeleBotmuxCoach` 抛出
+   `BlockingIOError: [Errno 35] Resource temporarily unavailable` 并退出。
+2. 根因不是二维码内容错误，而是冻结 console helper 处在 PTY 转发链路中；它先把
+   子进程的大块二维码输出写回 Terminal，再喂给登录链接解析器。macOS Terminal
+   短暂返回不可写时，原代码没有重试，导致 helper 直接崩溃，也让后续 URL 解析没有
+   机会继续执行。
+3. 用户手动打开新终端输入 `traex` 报找不到，更像是官方安装器完成后未能把
+   `$HOME/.local/bin` 持久写入 zsh 启动文件；桌宠安装脚本自身会临时导入该目录，
+   所以重新打开 Seele 后通常能续跑成功。
+4. “进程已完成”是 `.command` 脚本提前退出后的 Terminal 文案。此前桌宠只负责打开
+   Terminal，没有继续监控外部脚本结果，因此失败后需要用户手动重新打开应用续跑。
+
+### 本地修改
+
+1. `botmux_setup_coach.py` 新增有界 `_write_all`：遇到 `EAGAIN` /
+   `BlockingIOError` 时等待 fd 可写并续写，单次最多等待 5 秒，避免无限卡住。
+2. PTY 输出处理顺序调整为先 `feed` 给 coach，再写回 Terminal；这样 HTTPS 登录链接
+   一出现就会优先打开 Chrome，不再被二维码输出背压阻塞。
+3. `mac_byte_bootstrap.py` 在 Trae CLI 安装/升级后尽量把 `$HOME/.local/bin` 写入
+   `.zprofile` 和 `.zshrc`，并附带创建 `$HOME/.local/bin/trae-code` shim 转发到
+   `traex` 以兼容旧命令名。
+4. `Seele.py` 在启动安装终端后继续监控 `bootstrap-status.json`；发现状态为
+   `failed` 时自动关闭带本轮 UUID 的 Terminal 窗口，并重新启动一次安装状态机。
+5. 版本号升级为 `2.2.4`，并更新 `CHANGELOG.md` 与
+   `MAC_BYTE_AUTO_INSTALL_COMMANDS.md`。
+
+### 本地验证
+
+- 针对性单元测试：`tests.test_botmux_setup_coach` 与
+  `tests.test_integrations.MacByteBootstrapTests` 共 36 项通过。
+- Python 全量单元测试：48 项通过。
+- Python `py_compile`：`botmux_setup_coach.py`、`mac_byte_bootstrap.py`、
+  `tests/test_botmux_setup_coach.py`、`tests/test_integrations.py` 通过。
+- Python `compileall`、Botmux 插件 `npm test`、`git diff --check` 均通过。
+- Apple Silicon `.app`、console helper、ad-hoc 签名、主程序 smoke、coach 路径
+  smoke 和 VIP ZIP 完整性校验均通过。
+- 本地打包时将 `PYINSTALLER_CONFIG_DIR` 指向工作区内
+  `build/pyinstaller-config`，避免 PyInstaller 清理默认工作区外缓存触发沙箱限制。
+- VIP 测试包：
+  `vip-packages/Seele-2.2.4-vip-test-mac_byte-macos-arm64.zip`。
+- VIP ZIP SHA256：
+  `c52015d4e5c632b5fcdd2dad1edfc45d41cf3c6c3482218bdfb19eb29a11c304`。
+
 ## 已实现的 2.0 架构
 
 - `Seele.py`：PyQt 桌宠、托盘菜单、气泡和 Botmux 状态展示。
@@ -656,7 +705,7 @@ git diff --check
 
 ## 后续待验收
 
-1. 在全新字节 Apple Silicon 电脑验证 `v2.2.3` 完整安装和失败续跑。
+1. 在全新字节 Apple Silicon 电脑验证 `v2.2.4` 完整安装和失败续跑。
 2. 验证 Trae、Lark CLI、AgentBuddy 的真实首次登录和自动续跑。
 3. 验证 Botmux 扫码、语音提示、`traex` 自动选择和默认目录自动确认。
 4. 普通公网 macOS 版本、Developer ID 签名和公证仍未完成。
@@ -666,5 +715,5 @@ git diff --check
 1. 先阅读本文件和 `.trae/skills/seele-botmux/SKILL.md`。
 2. 运行 `git status --short --branch`，保护所有本地未提交修改。
 3. 不以远端 Release 安装包覆盖当前工作区的未提交修改。
-4. 按“后续待验收”在全新字节 Apple Silicon 电脑验证 `v2.2.3`，不要重复创建
+4. 按“后续待验收”在全新字节 Apple Silicon 电脑验证 `v2.2.4`，不要重复创建
    Tag 或发布安装包。

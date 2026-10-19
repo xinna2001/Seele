@@ -1,3 +1,4 @@
+import errno
 import io
 import os
 import sys
@@ -8,6 +9,29 @@ import botmux_setup_coach
 
 
 class PromptCoachTests(unittest.TestCase):
+    def test_write_all_retries_when_terminal_output_is_temporarily_blocked(self):
+        writes = []
+
+        def fake_write(_fd, data):
+            if not writes:
+                writes.append(b"blocked")
+                raise BlockingIOError(errno.EAGAIN, "temporarily unavailable")
+            writes.append(bytes(data))
+            return len(data)
+
+        with (
+            patch.object(botmux_setup_coach.os, "write", side_effect=fake_write),
+            patch.object(
+                botmux_setup_coach.select,
+                "select",
+                return_value=([], [7], []),
+            ) as wait_for_fd,
+        ):
+            botmux_setup_coach._write_all(7, b"qr-output")
+
+        self.assertEqual(writes, [b"blocked", b"qr-output"])
+        wait_for_fd.assert_called_once()
+
     def test_login_url_coach_opens_split_json_url_once(self):
         opened = []
         coach = botmux_setup_coach.LoginUrlCoach(
@@ -180,6 +204,44 @@ class PromptCoachTests(unittest.TestCase):
 
 @unittest.skipUnless(os.name == "posix", "PTY integration requires POSIX")
 class PtyCoachTests(unittest.TestCase):
+    def test_child_output_reaches_coach_before_terminal_write(self):
+        import pty
+
+        class RecordingCoach:
+            def __init__(self):
+                self.seen = []
+
+            def feed(self, data):
+                self.seen.append(data)
+                return []
+
+        input_master, input_slave = pty.openpty()
+        output_read, output_write = os.pipe()
+        self.addCleanup(os.close, input_master)
+        self.addCleanup(os.close, input_slave)
+        self.addCleanup(os.close, output_read)
+        self.addCleanup(os.close, output_write)
+        coach = RecordingCoach()
+
+        with patch.object(
+            botmux_setup_coach,
+            "_write_all",
+            side_effect=TimeoutError("blocked output"),
+        ):
+            with self.assertRaises(TimeoutError):
+                botmux_setup_coach.run_coached_command(
+                    [
+                        sys.executable,
+                        "-c",
+                        "import sys; sys.stdout.write('https://example.com/login\\n'); sys.stdout.flush()",
+                    ],
+                    coach=coach,
+                    stdin_fd=input_slave,
+                    stdout_fd=output_write,
+                )
+
+        self.assertIn(b"https://example.com/login", b"".join(coach.seen))
+
     def test_fake_child_receives_only_fixed_automatic_answers(self):
         import pty
 

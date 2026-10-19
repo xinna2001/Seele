@@ -357,6 +357,9 @@ class MacByteBootstrapTests(unittest.TestCase):
         self.assertIn("TRAEX_INSTALL_ASSUME_YES=1", script)
         self.assertIn("TRAEX_INSTALL_REMOVE_COCO=1", script)
         self.assertIn("traex backend cn --help", script)
+        self.assertIn("trae-code", script)
+        self.assertIn("user-local CLI tools", script)
+        self.assertIn('export PATH="$HOME/.local/bin:$PATH"', script)
         self.assertIn("当前 Trae CLI 不支持 backend cn", script)
         self.assertIn("当前版本不支持 backend cn", script)
         self.assertIn("traex backend cn", script)
@@ -530,6 +533,53 @@ class MacByteBootstrapTests(unittest.TestCase):
                 result.stdout,
             )
 
+    @unittest.skipIf(os.name == "nt", "requires a POSIX shell")
+    def test_trae_cli_path_setup_keeps_traex_available_in_new_shells(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            log = root / "commands.log"
+            traex = fake_bin / "traex"
+            traex.write_text(
+                "#!/bin/sh\n"
+                "printf 'traex %s\\n' \"$*\" >> \"$SEELE_TEST_LOG\"\n",
+                encoding="utf-8",
+            )
+            traex.chmod(0o755)
+            env = os.environ.copy()
+            env.update({
+                "HOME": str(root),
+                "PATH": f"{fake_bin}:/usr/bin:/bin",
+                "SEELE_TEST_LOG": str(log),
+            })
+
+            result = subprocess.run(
+                ["/bin/sh", "-c", mac_byte_bootstrap._trae_cli_path_commands()],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            shim = root / ".local" / "bin" / "trae-code"
+            self.assertTrue(shim.is_file())
+            self.assertTrue(os.access(shim, os.X_OK))
+            self.assertIn(
+                'export PATH="$HOME/.local/bin:$PATH"',
+                (root / ".zprofile").read_text(encoding="utf-8"),
+            )
+            result = subprocess.run(
+                [str(shim), "login", "status"],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("traex login status", log.read_text(encoding="utf-8"))
+
     def test_full_script_skips_botmux_setup_when_already_configured(self):
         script = mac_byte_bootstrap.build_bootstrap_script(
             "full",
@@ -656,6 +706,10 @@ class MacByteBootstrapTests(unittest.TestCase):
             self.assertEqual(
                 json.loads(status_path.read_text(encoding="utf-8"))["state"],
                 "completed",
+            )
+            self.assertEqual(
+                json.loads(status_path.read_text(encoding="utf-8"))["mode"],
+                "repair",
             )
             self.assertFalse(lock_path.exists())
             self.assertFalse(script_path.exists())
@@ -786,6 +840,42 @@ class MacByteBootstrapTests(unittest.TestCase):
                 )
             )
             self.assertEqual(status["state"], "running")
+            self.assertEqual(status["mode"], "setup")
+
+    def test_read_bootstrap_status_handles_missing_and_invalid_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            self.assertEqual(mac_byte_bootstrap.read_bootstrap_status(home), {})
+            status = home / ".seele" / "mac_byte" / "bootstrap-status.json"
+            status.write_text("not-json", encoding="utf-8")
+            self.assertEqual(mac_byte_bootstrap.read_bootstrap_status(home), {})
+            status.write_text('{"state":"failed","mode":"full"}', encoding="utf-8")
+            self.assertEqual(
+                mac_byte_bootstrap.read_bootstrap_status(home),
+                {"state": "failed", "mode": "full"},
+            )
+
+    def test_close_terminal_window_targets_unique_bootstrap_script_title(self):
+        completed = subprocess.CompletedProcess(
+            ["/usr/bin/osascript", "-e", ""],
+            0,
+            stdout="closed\n",
+            stderr="",
+        )
+        with (
+            patch.object(mac_byte_bootstrap.sys, "platform", "darwin"),
+            patch.object(
+                mac_byte_bootstrap.subprocess,
+                "run",
+                return_value=completed,
+            ) as run,
+        ):
+            closed = mac_byte_bootstrap.close_terminal_window_for_script(
+                "/tmp/bootstrap-deadbeef.command"
+            )
+
+        self.assertTrue(closed)
+        self.assertIn("bootstrap-deadbeef.command", run.call_args.args[0][2])
 
     def test_runtime_repair_preserves_existing_botmux_configuration(self):
         with tempfile.TemporaryDirectory() as directory:
