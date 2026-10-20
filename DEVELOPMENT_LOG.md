@@ -868,6 +868,23 @@ PR 的 Windows、macOS、Ubuntu 跨平台 CI 均已通过。
   29 条活跃任务，分组、深链与相对时间均正确。
 - 离屏渲染任务面板与右键菜单截图，确认样式与现有风格一致、新入口可见。
 
+### 线上发布验证
+
+- 发布提交：`046ec22`；`main` 推送 `dab1b1d..046ec22`，Tag `v2.3.0`。
+- `v2.3.0` 打包发布工作流 `39432992027`：Windows、mac_byte 打包、smoke、资产上传及
+  GitHub Release 发布全部成功。
+- Release：`https://github.com/xinna2001/Seele/releases/tag/v2.3.0`，包含 10 个预期资产；
+  GitHub latest 指向 `v2.3.0`。
+- 在线 manifest 确认版本 `2.3.0`、提交 `046ec225e435ce4c59e7018b900ee7f02e972b13`、
+  平台 `macos-arm64`、签名 `ad-hoc`。
+- 已重新下载在线 macOS ZIP，发布 SHA256 与 `unzip -t` 均通过；临时文件已删除。
+- 在线 SHA256：
+  - mac_byte ZIP：`28e14859a5618fd3b1b7b427801bf80b446a0a1d41a08296dc9bc9d4757ed292`
+  - mac_byte DMG：`81414ec56cb1b648f5d0c24ab65fc9efd9f17fc81367cb4e2bc76e0a845130d9`
+- 本地 VIP 测试包：
+  `vip-packages/Seele-2.3.0-vip-test-mac_byte-macos-arm64.zip`
+  （SHA256 `fdfff100fca1c8314fd3973586703a42a8405f0cf88a875e901d95ee51009d98`）。
+
 ## 已实现的 2.0 架构
 
 - `Seele.py`：PyQt 桌宠、托盘菜单、气泡和 Botmux 状态展示。
