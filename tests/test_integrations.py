@@ -33,7 +33,7 @@ class BotmuxConfigTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with patch.dict(os.environ, {"BOTMUX_DASHBOARD_URL": "http://env:7891"}):
-                config = botmux_client.load_config(path)
+                config = botmux_client.load_config(path, discover=False)
         self.assertTrue(config["enabled"])
         self.assertEqual(config["dashboard_url"], "http://env:7891")
         self.assertEqual(config["bridge"]["port"], 9000)
@@ -84,6 +84,169 @@ class BotmuxSessionStateTests(unittest.TestCase):
         self.assertEqual(summary["attention"], 1)
         state.apply("session.exited", {"sessionId": "one"})
         self.assertEqual(state.summary()["active"], 0)
+
+
+class TaskPanelDataTests(unittest.TestCase):
+    def _row(self, **overrides):
+        base = {
+            "sessionId": "s1",
+            "larkAppId": "cli_a",
+            "botName": "希儿",
+            "chatDisplayName": "群A",
+            "title": "任务一",
+            "status": "idle",
+            "lastMessageAt": 1_000_000_000_000,
+            "feishuThreadLink": "https://applink.feishu.cn/client/thread/open?open_thread_id=omt_x",
+            "feishuChatLink": "https://applink.feishu.cn/client/chat/open?openChatId=oc_x",
+        }
+        base.update(overrides)
+        return base
+
+    def test_safe_feishu_link_prefers_thread_and_rejects_non_applink(self):
+        row = self._row()
+        self.assertTrue(
+            botmux_client.safe_feishu_link(row).startswith(
+                "https://applink.feishu.cn/client/thread/open"
+            )
+        )
+        chat_only = self._row(feishuThreadLink=None)
+        self.assertIn("chat/open", botmux_client.safe_feishu_link(chat_only))
+        evil = self._row(
+            feishuThreadLink="javascript:alert(1)",
+            feishuChatLink="http://evil.example/x",
+        )
+        self.assertEqual(botmux_client.safe_feishu_link(evil), "")
+
+    def test_classify_task_group_buckets(self):
+        self.assertEqual(
+            botmux_client.classify_task_group({"status": "working"}), "working"
+        )
+        self.assertEqual(
+            botmux_client.classify_task_group({"status": "idle"}), "idle"
+        )
+        self.assertEqual(
+            botmux_client.classify_task_group(
+                {"status": "idle", "agentAttention": {"reason": "确认"}}
+            ),
+            "attention",
+        )
+        self.assertEqual(
+            botmux_client.classify_task_group({"status": "stalled"}), "attention"
+        )
+
+    def test_format_relative_time_boundaries(self):
+        now = 10_000_000_000_000
+        self.assertEqual(botmux_client.format_relative_time(0, now), "未知")
+        self.assertEqual(botmux_client.format_relative_time(now, now), "刚刚")
+        self.assertEqual(
+            botmux_client.format_relative_time(now - 5 * 60 * 1000, now), "5 分钟前"
+        )
+        self.assertEqual(
+            botmux_client.format_relative_time(now - 3 * 3600 * 1000, now), "3 小时前"
+        )
+        self.assertEqual(
+            botmux_client.format_relative_time(now - 2 * 86400 * 1000, now), "2 天前"
+        )
+        # A clock skew where the session timestamp is in the future stays "刚刚".
+        self.assertEqual(botmux_client.format_relative_time(now + 5000, now), "刚刚")
+
+    def test_build_active_tasks_filters_and_sorts(self):
+        now = 10_000_000_000_000
+        hour = 3600 * 1000
+        rows = [
+            self._row(sessionId="closed", status="closed", lastMessageAt=now),
+            self._row(sessionId="old", status="idle", lastMessageAt=now - 30 * hour),
+            self._row(
+                sessionId="idle_recent", status="idle", lastMessageAt=now - 2 * hour
+            ),
+            self._row(
+                sessionId="working_recent",
+                status="working",
+                lastMessageAt=now - 3 * hour,
+            ),
+            self._row(
+                sessionId="attention_recent",
+                status="idle",
+                agentAttention={"reason": "确认"},
+                lastMessageAt=now - 10 * hour,
+            ),
+        ]
+        tasks = botmux_client.build_active_tasks(rows, now_ms=now, window_hours=24)
+        ids = [task["sessionId"] for task in tasks]
+        # closed + >24h dropped; attention first, then working, then idle.
+        self.assertEqual(ids, ["attention_recent", "working_recent", "idle_recent"])
+        self.assertEqual(tasks[0]["groupLabel"], "等你回复")
+        self.assertEqual(tasks[1]["groupLabel"], "进行中")
+        self.assertEqual(tasks[2]["groupLabel"], "空闲")
+
+    def test_build_active_tasks_honors_bot_filter_and_missing_timestamp(self):
+        now = 10_000_000_000_000
+        rows = [
+            self._row(sessionId="mine", larkAppId="cli_a", lastMessageAt=now),
+            self._row(sessionId="other", larkAppId="cli_b", lastMessageAt=now),
+            self._row(
+                sessionId="no_ts",
+                larkAppId="cli_a",
+                lastMessageAt=None,
+                spawnedAt=now - 1000,
+            ),
+        ]
+        tasks = botmux_client.build_active_tasks(rows, now_ms=now, bot_id="cli_a")
+        ids = {task["sessionId"] for task in tasks}
+        self.assertEqual(ids, {"mine", "no_ts"})
+
+    def test_discover_local_dashboard_reads_port_and_token(self):
+        with tempfile.TemporaryDirectory() as home:
+            base = Path(home)
+            (base / ".dashboard-port").write_text("9123\n", encoding="utf-8")
+            (base / ".dashboard-token").write_text("tok-abc\n", encoding="utf-8")
+            info = botmux_client.discover_local_dashboard(base)
+        self.assertEqual(info, {"port": 9123, "token": "tok-abc"})
+
+    def test_load_config_auto_discovers_local_dashboard(self):
+        with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as cfg:
+            botmux_home = Path(home) / ".botmux"
+            botmux_home.mkdir()
+            (botmux_home / ".dashboard-port").write_text("9123", encoding="utf-8")
+            (botmux_home / ".dashboard-token").write_text("tok-abc", encoding="utf-8")
+            missing_config = Path(cfg) / "botmux_config.json"
+            with (
+                patch.object(botmux_client.Path, "home", return_value=Path(home)),
+                patch.dict(os.environ, {}, clear=False),
+            ):
+                for key in (
+                    "BOTMUX_DASHBOARD_URL",
+                    "BOTMUX_DASHBOARD_TOKEN",
+                    "SEELE_BOTMUX_ENABLED",
+                ):
+                    os.environ.pop(key, None)
+                config = botmux_client.load_config(missing_config)
+        self.assertTrue(config["enabled"])
+        self.assertEqual(config["dashboard_url"], "http://127.0.0.1:9123")
+        self.assertEqual(config["dashboard_token"], "tok-abc")
+
+    def test_load_config_explicit_values_override_discovery(self):
+        with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as cfg:
+            botmux_home = Path(home) / ".botmux"
+            botmux_home.mkdir()
+            (botmux_home / ".dashboard-port").write_text("9123", encoding="utf-8")
+            (botmux_home / ".dashboard-token").write_text("tok-abc", encoding="utf-8")
+            config_path = Path(cfg) / "botmux_config.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "enabled": False,
+                        "dashboard_url": "http://127.0.0.1:7000",
+                        "dashboard_token": "explicit",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(botmux_client.Path, "home", return_value=Path(home)):
+                config = botmux_client.load_config(config_path)
+        self.assertFalse(config["enabled"])
+        self.assertEqual(config["dashboard_url"], "http://127.0.0.1:7000")
+        self.assertEqual(config["dashboard_token"], "explicit")
 
 
 class RpaServiceTests(unittest.TestCase):
@@ -1073,6 +1236,64 @@ class MacByteRenderingTests(unittest.TestCase):
 
         self.assertEqual(QColor.fromRgba(surface.pixel(2, 12)).alpha(), 0)
         self.assertGreater(QColor.fromRgba(surface.pixel(20, 12)).alpha(), 0)
+
+    def test_task_panel_renders_rows_and_opens_validated_link(self):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PyQt5.QtWidgets import QApplication
+        import TaskPanelWindow
+
+        app = QApplication.instance() or QApplication([])
+        panel = TaskPanelWindow.main(None, {"enabled": True})
+        tasks = [
+            {
+                "sessionId": "a",
+                "botName": "希儿",
+                "chat": "群A",
+                "title": "进行中的任务",
+                "preview": "正在处理…",
+                "group": "working",
+                "groupLabel": "进行中",
+                "status": "working",
+                "lastActiveMs": 1.0,
+                "lastActiveText": "刚刚",
+                "link": "https://applink.feishu.cn/client/thread/open?open_thread_id=omt_x",
+            },
+            {
+                "sessionId": "b",
+                "botName": "希儿",
+                "chat": "私聊",
+                "title": "无链接任务",
+                "preview": "",
+                "group": "idle",
+                "groupLabel": "空闲",
+                "status": "idle",
+                "lastActiveMs": 1.0,
+                "lastActiveText": "1 小时前",
+                "link": "",
+            },
+        ]
+        panel._render_tasks(tasks)
+        app.processEvents()
+        rows = [
+            panel._list_layout.itemAt(index).widget()
+            for index in range(panel._list_layout.count())
+            if isinstance(panel._list_layout.itemAt(index).widget(), TaskPanelWindow._TaskRow)
+        ]
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(panel._status_label.text(), "共 2 条")
+
+        opened = []
+        with patch.object(TaskPanelWindow, "open_external", side_effect=lambda url: opened.append(url) or True):
+            panel._open_link(tasks[0]["link"])
+            panel._open_link(tasks[1]["link"])
+        self.assertEqual(opened, [tasks[0]["link"]])
+
+        panel._render_tasks([])
+        app.processEvents()
+        self.assertFalse(panel._empty_label.isHidden())
+        self.assertEqual(panel._status_label.text(), "共 0 条")
+        panel.close()
+        app.processEvents()
 
 
 if __name__ == "__main__":

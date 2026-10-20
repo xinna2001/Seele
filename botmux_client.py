@@ -48,7 +48,37 @@ def _merged_dict(base: dict, override: dict) -> dict:
     return result
 
 
-def load_config(path: str | os.PathLike | None = None) -> dict:
+def discover_local_dashboard(botmux_home: str | os.PathLike | None = None) -> dict:
+    """
+    Read the locally running Botmux Dashboard coordinates from ``~/.botmux``.
+
+    Botmux writes the chosen port to ``.dashboard-port`` and the read token to
+    ``.dashboard-token``. The port is dynamic, so a hardcoded default is wrong on
+    any machine where Botmux did not pick 7891. Returns ``{}`` when nothing is
+    found so callers can keep their existing configuration.
+    """
+    base = Path(botmux_home) if botmux_home else Path.home() / ".botmux"
+    info: dict = {}
+    try:
+        port = (base / ".dashboard-port").read_text(encoding="utf-8").strip()
+        if port.isdigit():
+            info["port"] = int(port)
+    except (OSError, ValueError):
+        pass
+    try:
+        token = (base / ".dashboard-token").read_text(encoding="utf-8").strip()
+        if token:
+            info["token"] = token
+    except OSError:
+        pass
+    return info
+
+
+def load_config(
+    path: str | os.PathLike | None = None,
+    *,
+    discover: bool = True,
+) -> dict:
     config_path = Path(path) if path else app_path("botmux_config.json")
     raw = {}
     try:
@@ -72,6 +102,21 @@ def load_config(path: str | os.PathLike | None = None) -> dict:
     enabled = os.environ.get("SEELE_BOTMUX_ENABLED")
     if enabled is not None:
         config["enabled"] = enabled.strip().lower() in {"1", "true", "yes", "on"}
+
+    # Auto-discover the local Botmux Dashboard so the pet works out of the box
+    # without a bundled botmux_config.json. Explicit file/env values always win.
+    if discover:
+        explicit_url = "dashboard_url" in raw or "BOTMUX_DASHBOARD_URL" in os.environ
+        explicit_token = "dashboard_token" in raw or "BOTMUX_DASHBOARD_TOKEN" in os.environ
+        explicit_enabled = "enabled" in raw or "SEELE_BOTMUX_ENABLED" in os.environ
+        if not (explicit_url and explicit_token and explicit_enabled):
+            found = discover_local_dashboard()
+            if found.get("port") and not explicit_url:
+                config["dashboard_url"] = f"http://127.0.0.1:{found['port']}"
+            if found.get("token") and not explicit_token:
+                config["dashboard_token"] = found["token"]
+            if found and not explicit_enabled:
+                config["enabled"] = True
     return config
 
 
@@ -196,6 +241,132 @@ class BotmuxClient:
             raise BotmuxError(f"Botmux event stream failed: {exc}") from exc
 
 
+FEISHU_APPLINK_PREFIX = "https://applink.feishu.cn/"
+
+# Botmux raw session statuses grouped into three human-friendly buckets the
+# task panel shows. Everything still open that is neither working nor awaiting a
+# human counts as idle.
+STATUS_WORKING = {"working", "analyzing", "starting"}
+STATUS_ATTENTION = {"limited", "stalled"}
+TASK_GROUP_LABELS = {
+    "attention": "等你回复",
+    "working": "进行中",
+    "idle": "空闲",
+}
+# Sort order for the panel: attention first, then working, then idle.
+TASK_GROUP_ORDER = {"attention": 0, "working": 1, "idle": 2}
+
+
+def safe_feishu_link(session: dict) -> str:
+    """
+    Return a validated Feishu applink for a session, or "" when none is safe.
+
+    Botmux already builds ``feishuThreadLink`` (precise thread) and
+    ``feishuChatLink`` (whole chat). We never hand an arbitrary API string to the
+    OS opener, so only ``https://applink.feishu.cn/`` URLs are accepted.
+    """
+    for key in ("feishuThreadLink", "feishuChatLink"):
+        value = session.get(key)
+        if isinstance(value, str):
+            candidate = value.strip()
+            if candidate.startswith(FEISHU_APPLINK_PREFIX):
+                return candidate
+    return ""
+
+
+def classify_task_group(session: dict) -> str:
+    """Map a raw Botmux session row to one of attention/working/idle."""
+    if (
+        session.get("agentAttention")
+        or session.get("pendingRepo")
+        or session.get("tuiPromptActive")
+        or session.get("status") in STATUS_ATTENTION
+    ):
+        return "attention"
+    if session.get("status") in STATUS_WORKING:
+        return "working"
+    return "idle"
+
+
+def format_relative_time(timestamp_ms, now_ms: float | None = None) -> str:
+    """Human-friendly '刚刚 / N 分钟前 / N 小时前 / N 天前' for a ms timestamp."""
+    if not isinstance(timestamp_ms, (int, float)) or timestamp_ms <= 0:
+        return "未知"
+    now = now_ms if now_ms is not None else time.time() * 1000
+    delta_seconds = (now - timestamp_ms) / 1000
+    if delta_seconds < 0:
+        delta_seconds = 0
+    if delta_seconds < 60:
+        return "刚刚"
+    minutes = int(delta_seconds // 60)
+    if minutes < 60:
+        return f"{minutes} 分钟前"
+    hours = int(delta_seconds // 3600)
+    if hours < 24:
+        return f"{hours} 小时前"
+    days = int(delta_seconds // 86400)
+    return f"{days} 天前"
+
+
+def build_active_tasks(
+    rows: list[dict],
+    *,
+    now_ms: float | None = None,
+    window_hours: float = 24,
+    bot_id: str = "",
+) -> list[dict]:
+    """
+    Turn raw Botmux session rows into normalized task-panel entries.
+
+    - Drops closed sessions and anything with no activity in ``window_hours``.
+    - Optionally filters to a single ``bot_id`` (larkAppId); empty keeps all bots.
+    - Sorts attention first, then working, then idle, newest activity first.
+    """
+    now = now_ms if now_ms is not None else time.time() * 1000
+    window_ms = window_hours * 3600 * 1000
+    tasks: list[dict] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if row.get("status") == "closed":
+            continue
+        if bot_id and row.get("larkAppId") != bot_id:
+            continue
+        last_active = row.get("lastMessageAt")
+        if not isinstance(last_active, (int, float)) or last_active <= 0:
+            # Fall back to spawn time so freshly created sessions still appear.
+            spawned = row.get("spawnedAt")
+            last_active = spawned if isinstance(spawned, (int, float)) else 0
+        if window_ms and last_active and (now - last_active) > window_ms:
+            continue
+        group = classify_task_group(row)
+        title = (
+            row.get("title")
+            or row.get("previewUserText")
+            or row.get("previewBotText")
+            or row.get("chatDisplayName")
+            or "未命名任务"
+        )
+        preview = row.get("previewBotText") or row.get("previewUserText") or ""
+        tasks.append({
+            "sessionId": str(row.get("sessionId") or ""),
+            "botName": row.get("botName") or "机器人",
+            "chat": row.get("chatDisplayName") or row.get("chatId") or "未知会话",
+            "title": str(title).strip(),
+            "preview": str(preview).strip(),
+            "group": group,
+            "groupLabel": TASK_GROUP_LABELS.get(group, group),
+            "status": row.get("status") or "",
+            "lastActiveMs": float(last_active or 0),
+            "lastActiveText": format_relative_time(last_active, now),
+            "link": safe_feishu_link(row),
+        })
+    tasks.sort(
+        key=lambda item: (TASK_GROUP_ORDER.get(item["group"], 9), -item["lastActiveMs"]),
+    )
+    return tasks
+
+
 class BotmuxSessionState:
     def __init__(self, bot_id: str = ""):
         self.bot_id = bot_id
@@ -227,6 +398,15 @@ class BotmuxSessionState:
             session_id = str(body.get("sessionId") or "")
             if session_id in self.sessions:
                 self.sessions[session_id]["status"] = "closed"
+
+    def active_tasks(self, *, now_ms: float | None = None, window_hours: float = 24) -> list[dict]:
+        """Normalized task-panel entries for the retained live sessions."""
+        return build_active_tasks(
+            list(self.sessions.values()),
+            now_ms=now_ms,
+            window_hours=window_hours,
+            bot_id=self.bot_id,
+        )
 
     def summary(self, *, connected: bool = True, error: str = "") -> dict:
         rows = [row for row in self.sessions.values() if row.get("status") != "closed"]

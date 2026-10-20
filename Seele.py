@@ -20,6 +20,7 @@ import StartupMode
 import write_file as wf
 import ProgramsConfigWindow
 import RoleSwitchWindow
+import TaskPanelWindow
 import botmux_client
 import mac_byte_bootstrap
 import rpa_bridge
@@ -479,6 +480,18 @@ class DesktopWife(QWidget):
         if not url or not open_external(url):
             QMessageBox.warning(self, "Botmux", "无法打开 Botmux Dashboard。")
 
+    def OpenTaskPanel(self) -> None:
+        panel = getattr(self, "_task_panel", None)
+        if panel is not None:
+            try:
+                panel.close()
+            except Exception:
+                pass
+        self._task_panel = TaskPanelWindow.main(self, self._botmux_config)
+        self._task_panel.show()
+        self._task_panel.raise_()
+        self._task_panel.activateWindow()
+
     def StartMacByteBootstrap(self) -> None:
         if not mac_byte_bootstrap.is_mac_byte():
             return
@@ -728,9 +741,23 @@ class DesktopWife(QWidget):
         """
         self.Menu = QMenu(self)
         self.Menu.setStyleSheet(
-            "QMenu { padding: 4px; }"
+            "QMenu {"
+            "  background-color: rgba(255, 255, 255, 245);"
+            "  border: 1px solid rgba(20, 30, 50, 30);"
+            "  border-radius: 12px;"
+            "  padding: 6px;"
+            "}"
             "QMenu::icon { width: 18px; height: 18px; }"
-            "QMenu::item { padding: 6px 14px; }"
+            "QMenu::item {"
+            "  padding: 7px 18px 7px 14px;"
+            "  border-radius: 8px;"
+            "  color: #1a2233;"
+            "}"
+            "QMenu::item:selected {"
+            "  background-color: rgba(44, 139, 230, 38);"
+            "  color: #1677d2;"
+            "}"
+            "QMenu::separator { height: 1px; background: rgba(20, 30, 50, 24); margin: 5px 8px; }"
         )
 
         show_legacy_controls = not mac_byte_bootstrap.is_mac_byte()
@@ -754,6 +781,9 @@ class DesktopWife(QWidget):
         self.botmux_status = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"机器人状态", self)
         self.Menu.addAction(self.botmux_status)
 
+        self.task_panel = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"任务面板", self)
+        self.Menu.addAction(self.task_panel)
+
         self.botmux_dashboard = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"打开 Botmux", self)
         self.Menu.addAction(self.botmux_dashboard)
 
@@ -770,6 +800,7 @@ class DesktopWife(QWidget):
             self.startup.triggered.connect(self.Startup)
         self.change_role.triggered.connect(self.ChangeRole)
         self.botmux_status.triggered.connect(self.ShowBotmuxStatus)
+        self.task_panel.triggered.connect(self.OpenTaskPanel)
         self.botmux_dashboard.triggered.connect(self.OpenBotmuxDashboard)
         self.StartTray.triggered.connect(self.SetTray)
         self.CloseWindowAction.triggered.connect(self.CloseWindowActionEvent)

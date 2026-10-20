@@ -824,11 +824,57 @@ PR 的 Windows、macOS、Ubuntu 跨平台 CI 均已通过。
   - Windows 便携 ZIP：`eeeaef5205aa5eb1d866368f61ac4ec542c68aa8cee4427ac89bfb53263581eb`
   - Windows 安装包：`1e1843d933c72148e9aabcfa1ae8af4a2c176f8150f63b252490595dae8540f7`
 
+## 2026-10-20 v2.3.0 Botmux 任务面板
+
+状态：已完成本地修改与验证，准备提交推送 `main`、创建 `v2.3.0` Tag 和 GitHub Release。
+按用户明确授权直接发布；真机验收在发布后进行，VIP 包同时产出供实跑。
+
+### 需求与决策
+
+1. 用户设想：一个能看到“谁在哪个群发起了什么任务、现在什么状态”的面板，24 小时无
+   反馈的任务自动从面板隐藏，点一下直接跳转到对应飞书话题以找回上下文。
+2. 结论：在桌宠（Seele）里做，不改 Botmux 本体。依据——Botmux `/api/sessions`
+   已返回全部所需字段（`botName`、`chatDisplayName`、`status`、`lastMessageAt`、
+   以及已拼好的 `feishuThreadLink`/`feishuChatLink` 深链）；需求主要是个人化的视图层
+   和“有主见的默认”（如 24h 过滤），不适合作为上游所有用户的默认行为；桌宠已内置
+   `botmux_client` 的 REST/SSE 管道，净新增视图即可，且与 Botmux 频繁升级解耦。
+3. 入口定为右键菜单「任务面板」→ 独立窗口；状态归并为口语化「进行中 / 等你回复 /
+   空闲」，底层仍映射 Botmux 原始字段。
+
+### 实现内容
+
+1. `botmux_client.py`：
+   - 新增 `discover_local_dashboard()`：读取 `~/.botmux/.dashboard-port` 与
+     `.dashboard-token`。`load_config()` 增加 `discover=True`，在未显式配置时自动
+     连通本机 Dashboard（显式文件/环境变量优先）。修复“未随包附带
+     `botmux_config.json` 导致默认 `enabled=false`、端口硬编码 `7891`”的连通缺口。
+   - 新增纯函数 `safe_feishu_link()`（仅接受 `https://applink.feishu.cn/` 深链）、
+     `classify_task_group()`（attention/working/idle）、`format_relative_time()`
+     和 `build_active_tasks()`（丢弃 closed 与超 24h、可按 bot 过滤、三组排序）。
+   - `BotmuxSessionState` 增加 `active_tasks()` 复用上述视图；`summary()` 行为不变。
+2. 新增 `TaskPanelWindow.py`：无边框圆角半透明窗口，沿用角色窗口的美学与
+   `_fit_to_screen` 自适应；后台线程 `_SessionFetcher` 拉取会话不阻塞 UI；15 秒自动
+   刷新；空列表、离线和无链接任务均有降级显示；点击行用 `open_external` 打开深链。
+3. `Seele.py`：右键菜单新增「任务面板」入口与 `OpenTaskPanel()`；右键菜单改为圆角、
+   品牌蓝悬停的统一样式。
+4. 版本号升级为 `2.3.0`（新增功能，MINOR 递增、PATCH 归零）。
+
+### 本地验证
+
+- Python `compileall`：通过。
+- Python 单元测试：64 项通过（新增任务面板数据层 8 项、面板 UI 渲染/跳转 1 项）。
+- Botmux 插件 build、validate 和 MCP smoke：通过。
+- 对运行中的本机 Botmux 实测：自动发现 Dashboard，拉取 1384 行会话，过滤出 24h 内
+  29 条活跃任务，分组、深链与相对时间均正确。
+- 离屏渲染任务面板与右键菜单截图，确认样式与现有风格一致、新入口可见。
+
 ## 已实现的 2.0 架构
 
 - `Seele.py`：PyQt 桌宠、托盘菜单、气泡和 Botmux 状态展示。
 - `mac_byte_bootstrap.py`：字节内部 macOS 首次启动检测、安装和登录引导。
-- `botmux_client.py`：Botmux Dashboard REST、SSE 和任务触发。
+- `botmux_client.py`：Botmux Dashboard REST、SSE、任务触发、本机 Dashboard 自动发现
+  和任务面板数据视图（`build_active_tasks` 等）。
+- `TaskPanelWindow.py`：Botmux 任务面板窗口；展示 24h 内活跃任务并跳转飞书话题。
 - `rpa_service.py`：影刀工作流白名单、幂等和状态管理。
 - `rpa_bridge.py`：Botmux 到本地 RPA 的受限 HTTP Bridge。
 - `botmux-skill/`：Seele 的 Botmux 插件；不修改 Botmux 内核。
@@ -858,11 +904,12 @@ git diff --check
 
 ## 后续待验收
 
-1. 在全新字节 Apple Silicon 电脑验证 `v2.2.6` 完整安装和失败续跑。
+1. 在全新字节 Apple Silicon 电脑验证 `v2.3.0` 完整安装和失败续跑。
 2. 验证 Trae、Lark CLI、AgentBuddy 的真实首次登录和自动续跑。
 3. 验证 Homebrew 密码语音、自动确认、Botmux 扫码及全部确定性默认项。
 4. 验证角色窗口在实际 Retina 屏幕上的尺寸、关闭按钮和小屏重排。
-5. 普通公网 macOS 版本、Developer ID 签名和公证仍未完成。
+5. 在真机验证任务面板：自动发现本机 Dashboard、24h 过滤、状态分组、点击跳转飞书话题。
+6. 普通公网 macOS 版本、Developer ID 签名和公证仍未完成。
 
 ## 新话题恢复步骤
 
