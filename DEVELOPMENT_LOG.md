@@ -887,8 +887,8 @@ PR 的 Windows、macOS、Ubuntu 跨平台 CI 均已通过。
 
 ## 2026-10-21 v2.3.1 任务发起者补全
 
-状态：已完成本地修改、验证和 VIP 包构建，待用户真机验收；未经本轮明确确认，不提交、
-不推送、不创建 Tag、不更新 GitHub Release。
+状态：用户已确认提交；已提交并推送 `main`，创建 `v2.3.1` Tag 和 GitHub Release；
+本地、跨平台 CI、线上构建与下载复核均通过。
 
 ### 问题证据
 
@@ -928,6 +928,22 @@ PR 的 Windows、macOS、Ubuntu 跨平台 CI 均已通过。
 - VIP 测试包：
   `vip-packages/Seele-2.3.1-vip-test-mac_byte-macos-arm64.zip`
   （SHA256 `b3197edf8062e32bd7b815e20b6fbca0dee6a81e55ce27af151a1fa933a497ff`）。
+
+### 线上发布验证
+
+- 功能提交与 Tag 目标：`16d2a6220e0725b4bfd93e2632e35c66915670af`。
+- `main` 跨平台测试工作流 `39551162562`、`v2.3.1` 跨平台测试工作流
+  `39551165705`：Windows、macOS、Ubuntu 全部成功。
+- `v2.3.1` 打包发布工作流 `39551165593`：Windows、mac_byte 打包、smoke、
+  资产上传及 GitHub Release 发布全部成功。
+- Release：`https://github.com/xinna2001/Seele/releases/tag/v2.3.1`，包含 10 个
+  预期资产；GitHub latest 已指向 `v2.3.1`。
+- 在线 manifest 确认版本 `2.3.1`、提交
+  `16d2a6220e0725b4bfd93e2632e35c66915670af`、平台 `macos-arm64`、签名 `ad-hoc`。
+- 已重新下载在线 macOS ZIP；发布 SHA256 与 `unzip -t` 均通过，验证临时文件已删除。
+- 在线 SHA256：
+  - mac_byte ZIP：`f85012eaa533e3590cec8ff4f9eb63890a985eafe903cdbce2e13d242ef4fb56`
+  - mac_byte DMG：`da3c03bc3a9d9cab83ef8ed4804ac4ee3465f266dca88a3123250b384095c08d`
 
 ## 已实现的 2.0 架构
 
