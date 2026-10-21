@@ -885,6 +885,50 @@ PR 的 Windows、macOS、Ubuntu 跨平台 CI 均已通过。
   `vip-packages/Seele-2.3.0-vip-test-mac_byte-macos-arm64.zip`
   （SHA256 `fdfff100fca1c8314fd3973586703a42a8405f0cf88a875e901d95ee51009d98`）。
 
+## 2026-10-21 v2.3.1 任务发起者补全
+
+状态：已完成本地修改、验证和 VIP 包构建，待用户真机验收；未经本轮明确确认，不提交、
+不推送、不创建 Tag、不更新 GitHub Release。
+
+### 问题证据
+
+1. 用户实际验收 `v2.3.0` 后确认状态、群名和飞书话题跳转均正常，但任务卡片没有显示
+   “最开始是谁艾特 Agent 发起任务”。
+2. Dashboard `/api/sessions` 已返回 `ownerOpenId`。Botmux 创建普通飞书会话时会把
+   当时的消息发送者写入该字段，后续其他人追问不会改变它；不能使用
+   `quoteTargetSenderOpenId` 或最后一条消息发送者代替。
+3. 同一会话的 `replyTargets[].participants[]` 保存参与者的 `openId` 和 `name`；
+   汇总全部会话后可建立稳定的 `open_id → 姓名` 索引。
+4. 本机真实数据共 1396 条会话、16 条 24 小时活跃任务；16 条的 `ownerOpenId`
+   均成功解析为姓名，当前覆盖率 100%。
+
+### 实现内容
+
+1. `botmux_client.py` 新增 `participant_name_index()` 和
+   `resolve_task_initiator()`；`build_active_tasks()` 输出
+   `initiatorName`/`initiatorOpenId`。
+2. 普通飞书任务严格使用 `ownerOpenId` 识别最初发起者，并允许从其他历史会话跨行
+   补全姓名；定时任务显示“系统定时”，无姓名时显示“未知用户”。
+3. `TaskPanelWindow.py` 卡片首行改为“发起者：姓名 · 群名”，悬停提示分别显示完整
+   发起者和会话名称。
+4. 版本升级为 `2.3.1`（补丁修复，PATCH 递增）。
+
+### 本地验证
+
+- Python `compileall`：通过。
+- Python 单元测试：66 项通过；新增跨会话发起者补名与定时任务回退测试。
+- Botmux 插件 build、validate 和 MCP smoke：通过。
+- 真实 Dashboard 构建 16 条活跃任务耗时约 140ms（包含 Dashboard 请求），发起者
+  姓名解析覆盖率 100%。
+- 使用真实数据离屏渲染 `560×620` 面板截图，确认“发起者 + 群名 + 状态 + 时间”
+  无重叠。
+- Apple Silicon `.app` 和 Coach 均为 arm64；包内版本与 plist short/build version
+  均为 `2.3.1`；ad-hoc 严格签名、主程序 smoke、Coach 路径 smoke 和 ZIP 完整性
+  均通过。
+- VIP 测试包：
+  `vip-packages/Seele-2.3.1-vip-test-mac_byte-macos-arm64.zip`
+  （SHA256 `b3197edf8062e32bd7b815e20b6fbca0dee6a81e55ce27af151a1fa933a497ff`）。
+
 ## 已实现的 2.0 架构
 
 - `Seele.py`：PyQt 桌宠、托盘菜单、气泡和 Botmux 状态展示。
@@ -921,7 +965,7 @@ git diff --check
 
 ## 后续待验收
 
-1. 在全新字节 Apple Silicon 电脑验证 `v2.3.0` 完整安装和失败续跑。
+1. 在全新字节 Apple Silicon 电脑验证 `v2.3.1` 完整安装和失败续跑。
 2. 验证 Trae、Lark CLI、AgentBuddy 的真实首次登录和自动续跑。
 3. 验证 Homebrew 密码语音、自动确认、Botmux 扫码及全部确定性默认项。
 4. 验证角色窗口在实际 Retina 屏幕上的尺寸、关闭按钮和小屏重排。

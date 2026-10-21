@@ -1,8 +1,9 @@
 """Botmux task panel: live view of who started what, where, and its status.
 
 The panel lists Botmux sessions active within the last 24 hours. Each row shows
-the chat, bot, title and a human-friendly status group (进行中 / 等你回复 / 空闲).
-Clicking a row opens Feishu at the exact thread so the user can recover context.
+the initiator, chat, bot, title and a human-friendly status group
+(进行中 / 等你回复 / 空闲). Clicking a row opens Feishu at the exact thread so
+the user can recover context.
 
 Data comes from ``botmux_client`` (Dashboard REST). This window never patches
 Botmux itself; it only renders what the Dashboard already exposes.
@@ -124,7 +125,7 @@ class _TaskRow(QFrame):
         outer.setContentsMargins(14, 11, 14, 11)
         outer.setSpacing(6)
 
-        # Top line: status pill + chat name (left), relative time (right).
+        # Top line: status + original initiator/chat (left), relative time (right).
         top = QHBoxLayout()
         top.setSpacing(8)
         pill = QLabel(task.get("groupLabel") or "", self)
@@ -139,14 +140,17 @@ class _TaskRow(QFrame):
             "}"
         )
         pill.setFixedHeight(20)
-        chat = QLabel(task.get("chat") or "", self)
-        chat.setStyleSheet("QLabel { color: #5a6475; font-size: 12px; }")
-        chat.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        initiator = task.get("initiatorName") or "未知用户"
+        chat_name = task.get("chat") or "未知会话"
+        source = QLabel(f"发起者：{initiator} · {chat_name}", self)
+        source.setToolTip(f"发起者：{initiator}\n会话：{chat_name}")
+        source.setStyleSheet("QLabel { color: #5a6475; font-size: 12px; }")
+        source.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         when = QLabel(task.get("lastActiveText") or "", self)
         when.setStyleSheet("QLabel { color: #9aa3b2; font-size: 12px; }")
         when.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         top.addWidget(pill)
-        top.addWidget(chat, 1)
+        top.addWidget(source, 1)
         top.addWidget(when)
         outer.addLayout(top)
 

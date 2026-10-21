@@ -96,6 +96,18 @@ class TaskPanelDataTests(unittest.TestCase):
             "title": "任务一",
             "status": "idle",
             "lastMessageAt": 1_000_000_000_000,
+            "ownerOpenId": "ou_owner",
+            "replyTargets": {
+                "om_first": {
+                    "participants": [
+                        {
+                            "openId": "ou_owner",
+                            "name": "张三",
+                            "isBot": False,
+                        }
+                    ]
+                }
+            },
             "feishuThreadLink": "https://applink.feishu.cn/client/thread/open?open_thread_id=omt_x",
             "feishuChatLink": "https://applink.feishu.cn/client/chat/open?openChatId=oc_x",
         }
@@ -194,6 +206,49 @@ class TaskPanelDataTests(unittest.TestCase):
         tasks = botmux_client.build_active_tasks(rows, now_ms=now, bot_id="cli_a")
         ids = {task["sessionId"] for task in tasks}
         self.assertEqual(ids, {"mine", "no_ts"})
+
+    def test_build_active_tasks_resolves_original_initiator_across_sessions(self):
+        now = 10_000_000_000_000
+        active = self._row(
+            sessionId="active",
+            lastMessageAt=now,
+            ownerOpenId="ou_original",
+            replyTargets={},
+        )
+        historical_name_source = self._row(
+            sessionId="historical",
+            status="closed",
+            ownerOpenId="ou_other",
+            replyTargets={
+                "om_old": {
+                    "participants": [
+                        {
+                            "openId": "ou_original",
+                            "name": "最初发起人",
+                            "isBot": False,
+                        }
+                    ]
+                }
+            },
+        )
+        tasks = botmux_client.build_active_tasks(
+            [active, historical_name_source],
+            now_ms=now,
+        )
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(tasks[0]["initiatorName"], "最初发起人")
+        self.assertEqual(tasks[0]["initiatorOpenId"], "ou_original")
+
+    def test_build_active_tasks_labels_scheduled_session(self):
+        now = 10_000_000_000_000
+        scheduled = self._row(
+            sessionId="scheduled",
+            lastMessageAt=now,
+            creationSource="schedule",
+        )
+        task = botmux_client.build_active_tasks([scheduled], now_ms=now)[0]
+        self.assertEqual(task["initiatorName"], "系统定时")
+        self.assertEqual(task["initiatorOpenId"], "")
 
     def test_discover_local_dashboard_reads_port_and_token(self):
         with tempfile.TemporaryDirectory() as home:
@@ -1239,7 +1294,7 @@ class MacByteRenderingTests(unittest.TestCase):
 
     def test_task_panel_renders_rows_and_opens_validated_link(self):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-        from PyQt5.QtWidgets import QApplication
+        from PyQt5.QtWidgets import QApplication, QLabel
         import TaskPanelWindow
 
         app = QApplication.instance() or QApplication([])
@@ -1249,6 +1304,8 @@ class MacByteRenderingTests(unittest.TestCase):
                 "sessionId": "a",
                 "botName": "希儿",
                 "chat": "群A",
+                "initiatorName": "张三",
+                "initiatorOpenId": "ou_owner",
                 "title": "进行中的任务",
                 "preview": "正在处理…",
                 "group": "working",
@@ -1262,6 +1319,8 @@ class MacByteRenderingTests(unittest.TestCase):
                 "sessionId": "b",
                 "botName": "希儿",
                 "chat": "私聊",
+                "initiatorName": "李四",
+                "initiatorOpenId": "ou_owner_2",
                 "title": "无链接任务",
                 "preview": "",
                 "group": "idle",
@@ -1281,6 +1340,12 @@ class MacByteRenderingTests(unittest.TestCase):
         ]
         self.assertEqual(len(rows), 2)
         self.assertEqual(panel._status_label.text(), "共 2 条")
+        source_labels = [
+            label.text()
+            for label in rows[0].findChildren(QLabel)
+            if label.text().startswith("发起者：")
+        ]
+        self.assertEqual(source_labels, ["发起者：张三 · 群A"])
 
         opened = []
         with patch.object(TaskPanelWindow, "open_external", side_effect=lambda url: opened.append(url) or True):

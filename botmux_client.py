@@ -308,6 +308,47 @@ def format_relative_time(timestamp_ms, now_ms: float | None = None) -> str:
     return f"{days} 天前"
 
 
+def participant_name_index(rows: list[dict]) -> dict[str, str]:
+    """Build a reusable Feishu open-id to display-name index from session rows."""
+    names: dict[str, str] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        reply_targets = row.get("replyTargets")
+        if not isinstance(reply_targets, dict):
+            continue
+        for target in reply_targets.values():
+            if not isinstance(target, dict):
+                continue
+            participants = target.get("participants")
+            if not isinstance(participants, list):
+                continue
+            for participant in participants:
+                if not isinstance(participant, dict) or participant.get("isBot"):
+                    continue
+                open_id = str(participant.get("openId") or "").strip()
+                name = str(participant.get("name") or "").strip()
+                if open_id and name:
+                    names.setdefault(open_id, name)
+    return names
+
+
+def resolve_task_initiator(row: dict, names: dict[str, str]) -> tuple[str, str]:
+    """
+    Resolve the person who originally created the Botmux session.
+
+    ``ownerOpenId`` is assigned from the sender when Botmux creates a Feishu
+    session. It remains stable when other people later reply, unlike the latest
+    message/quote sender fields.
+    """
+    if row.get("creationSource") == "schedule":
+        return "系统定时", ""
+    owner_open_id = str(row.get("ownerOpenId") or "").strip()
+    if owner_open_id:
+        return names.get(owner_open_id, "未知用户"), owner_open_id
+    return "未知用户", ""
+
+
 def build_active_tasks(
     rows: list[dict],
     *,
@@ -324,6 +365,7 @@ def build_active_tasks(
     """
     now = now_ms if now_ms is not None else time.time() * 1000
     window_ms = window_hours * 3600 * 1000
+    participant_names = participant_name_index(rows)
     tasks: list[dict] = []
     for row in rows:
         if not isinstance(row, dict):
@@ -348,10 +390,13 @@ def build_active_tasks(
             or "未命名任务"
         )
         preview = row.get("previewBotText") or row.get("previewUserText") or ""
+        initiator_name, initiator_open_id = resolve_task_initiator(row, participant_names)
         tasks.append({
             "sessionId": str(row.get("sessionId") or ""),
             "botName": row.get("botName") or "机器人",
             "chat": row.get("chatDisplayName") or row.get("chatId") or "未知会话",
+            "initiatorName": initiator_name,
+            "initiatorOpenId": initiator_open_id,
             "title": str(title).strip(),
             "preview": str(preview).strip(),
             "group": group,
