@@ -330,7 +330,16 @@ def register_keepalive(distro: str, user: str, home: str, sid: str) -> None:
     run_ps(task_script(SERVICE_TASK, command, sid, keepalive=True))
 
 
+def configure_console() -> None:
+    """Redirected Windows output defaults to CP1252 on English systems."""
+    if sys.platform == "win32":
+        for stream in (sys.stdout, sys.stderr):
+            if stream is not None and hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def run_install() -> int:
+    configure_console()
     status = read_status()
     try:
         with InstallLock():

@@ -1,5 +1,6 @@
 import base64
 import configparser
+import io
 import os
 import pathlib
 import subprocess
@@ -14,6 +15,25 @@ import windows_byte_linux as linux
 
 
 class WindowsByteTests(unittest.TestCase):
+    def test_english_windows_redirected_console_keeps_chinese_and_reboot_result(self):
+        buffer = io.BytesIO()
+        output = io.TextIOWrapper(buffer, encoding="cp1252")
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(host, "state_dir", return_value=pathlib.Path(directory)),
+            patch.object(host, "windows_identity", return_value="sid-test"),
+            patch.object(host, "boot_id", return_value="boot-one"),
+            patch.object(host.sys, "platform", "win32"),
+            patch.object(host.sys, "stdout", output),
+            patch.object(host.sys, "stderr", output),
+        ):
+            host.save_status({}, state="waiting_reboot", boot_id="boot-one",
+                             windows_sid="sid-test", stage="wsl")
+            self.assertEqual(host.run_install(), 3010)
+            output.flush()
+            self.assertIn("需要重启", buffer.getvalue().decode("utf-8"))
+        output.close()
+
     def test_same_boot_waits_without_repeating_install_or_registration(self):
         with (
             tempfile.TemporaryDirectory() as directory,

@@ -57,6 +57,11 @@
   两包 ZIP/摘要核验通过；Windows 包包含 certifi CA、独立 helper 源码与内置 Python。
 - 菜单视觉证据：`vip-packages/Seele-2.5.0-update-menu.png`，
   模拟高版本红点，验证“检查更新”始终在底部；线上当前没有高于 2.5.0 的 Release。
+- 发布 CI 修正：首次 Windows CI 在 CP1252 输出中文安装提示时抛
+  `UnicodeEncodeError`，导致成功、重启和锁竞争分支异常退出。
+  `run_install()` 开始时将可配置 stdout/stderr 设为 UTF-8，
+  新增英文系统重定向输出与重启返回码回归，本地 99 项测试通过。
+  该失败触发矩阵 fail-fast；PR/分支 CI 修正后重新运行。
 
 ## 2026-10-21 Windows 字节版 WSL 安装修复（2.4.0 本地待验收）
 
