@@ -3,7 +3,7 @@ from threading import Thread
 import write_file as wf
 import webbrowser
 import play_vioce as pv
-from platform_utils import app_path, get_tools_dir
+from platform_utils import app_path, data_path, get_tools_dir
 
 
 def get_tools_folder_path():
@@ -27,7 +27,7 @@ def set_file(current_dir):
     # 获取下载路径
     download_path = os.path.join(os.path.expanduser("~"), "Downloads")
     # 实时获取和当前文件同级目录的 state.json 文件路径
-    src_file = os.path.join(current_dir, 'state.json')
+    src_file = str(data_path("state.json"))
     installation_package_path = os.path.join(current_dir,'installationPackage')
     # 创建文件夹
     folder_path = get_tools_folder_path()
@@ -69,7 +69,7 @@ def open_url(url):
 def main(current_dir):
     pv.main("1.wav")
     set_file(current_dir)
-    state_path = app_path("state.json")
+    state_path = data_path("state.json")
     dic = wf.read_dict_from_json(state_path) or {}
     open_url("https://www.yingdao.com/product/")
     open_url("https://api.winrobot360.com/redirect/robot/share?inviteKey=050edc1539037e9f")

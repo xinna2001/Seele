@@ -34,10 +34,12 @@ Botmux 扩展位于 [`botmux-skill/`](botmux-skill/)，不需要修改 Botmux �
 
 ## 版本与安装包
 
-当前正式版本记录在 [`VERSION`](VERSION) 中。GitHub Release 提供：
+当前版本记录在 [`VERSION`](VERSION) 中。GitHub Release 提供：
 
 - `Seele-<version>-windows-x64-setup.exe`：Windows 安装版；
 - `Seele-<version>-windows-x64-portable.zip`：Windows 便携版；
+- `Seele-<version>-windows_byte-x64-setup.exe`：Windows 字节版安装包；
+- `Seele-<version>-windows_byte-x64-portable.zip`：Windows 字节版便携包；
 - `Seele-<version>-mac_byte-macos-arm64.dmg`：字节内部 Apple Silicon 安装版；
 - `Seele-<version>-mac_byte-macos-arm64.zip`：字节内部 Apple Silicon 压缩包；
 - `Seele-mac_byte-macos-arm64.dmg` / `.zip`：内容与对应版本文件相同的稳定别名，供文档通过 GitHub `releases/latest/download` 永久链接到最新版；
@@ -47,6 +49,32 @@ Botmux 扩展位于 [`botmux-skill/`](botmux-skill/)，不需要修改 Botmux �
 推送 `v*` Tag 或手动运行 `Package and release` GitHub Actions 工作流会执行测试、打包并发布 Release。打包任务使用 `windows-packaging` Environment，因此可以在仓库侧边栏的 Deployments 中查看发布记录。
 
 ## 安装
+
+macOS：完整解压 ZIP，打开 Seele 后选择安装到“应用程序”，安装完成自动重启。
+若系统应用目录不可写，会使用当前用户的 `~/Applications`。
+DMG 也可将 Seele 拖到 Applications。之后无需保留下载目录。
+
+Windows：正式版双击 `setup.exe` 安装；便携版完整解压到固定目录后运行。
+
+### 检查更新与设置保存
+
+启动 5 秒后在后台检查 GitHub 最新正式版本，之后每小时检查一次。
+右键菜单最后一项始终为“检查更新”；有新版时显示红点，点击即下载、
+校验、替换并重启。无网络时后台静默，手动检查可显示失败提示。
+源码运行支持检查，不替换项目文件。
+
+角色、语音、自定义工作流、Botmux 设置和日志保存到当前用户专属目录：
+
+- macOS：`~/Library/Application Support/Seele/<edition>/`；
+- Windows：`%LOCALAPPDATA%\Seele\<edition>\`；
+- Linux：`$XDG_DATA_HOME/Seele/<edition>/`（默认 `~/.local/share`）。
+
+第一次启动会迁移旧应用包内已有设置，此后新版不会覆盖。
+普通版与字节版分别保存设置。Botmux 和 WSL 自身的已有登录与配置保留。
+更新按发行类型和平台选择包，验证 SHA256、发布清单和包内版本，
+运行启动自检；新版启动失败则恢复旧应用。更新时请保持设备开机。
+
+### 源码运行
 
 推荐使用 Conda 和 Python 3.11：
 
@@ -58,6 +86,19 @@ python Seele.py
 ```
 
 Linux 还需由系统包管理器安装 Qt/XCB、PortAudio 和 Tk。Wayland、macOS 和部分 Linux 桌面可能不允许 `keyboard` 注册全局热键，此时可在桌面宠物右键菜单选择“唤醒输入”。
+
+## Windows 字节版
+
+新增 `windows_byte` 发行类型：复用可用 WSL2，缺失时先安装；
+Windows 要求重启则保存进度，同一用户登录后自动继续。
+WSL 内以普通用户部署 Botmux 和字节 CLI，启用 systemd/watchdog，
+Windows 登录任务及前台保活负责持续运行与恢复。
+
+VIP 便携测试包完整解压后双击 `启动希儿.vbs`。源码可设置
+`SEELE_EDITION=windows_byte` 后启动。详见 [`WINDOWS_BYTE_INSTALL.md`](WINDOWS_BYTE_INSTALL.md)。
+正式构建输出 `Seele-<version>-windows_byte-x64-setup.exe` 和
+`Seele-<version>-windows_byte-x64-portable.zip`，保留普通 Windows 包。
+真实 Windows 首次安装、重启续装和账号授权仍需真机验收。
 
 ## mac_byte 版本
 

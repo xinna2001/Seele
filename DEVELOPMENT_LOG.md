@@ -10,6 +10,97 @@
 - 不在本文记录 Token、Cookie、账号、内网凭据或其他秘密。
 - 不删除远端 Release、Tag 或回退远端分支，除非用户明确批准。
 
+## 2026-10-21 安装、自动更新与设置保留（2.5.0 发布准备）
+
+用户授权实现启动联网检查、右键最后“检查更新”红点、点击下载安装重启、
+设置移出应用包。本批次包含上一个未发布的 Windows 字节版改动；
+用户已明确回复“OK啦，推吧”，授权本批次提交、合并和发布。
+采用功能分支 -> PR -> CI 通过后合并 -> Tag/Release，保留分支和 PR 记录。
+
+- `platform_utils.py`：区分只读资源与可写用户目录，按 edition 隔离设置；
+  首次迁移 state/uid/file_name/config/botmux_config，原子写入与私有文件权限。
+  macOS 新 ZIP 可优先迁移已安装同类型旧应用的设置。
+- macOS 设置目录 `~/Library/Application Support/Seele/<edition>/`，
+  Windows `%LOCALAPPDATA%/Seele/<edition>/`，Linux XDG data home。
+  `SEELE_DATA_DIR` 用于测试隔离；配置窗口、语音、RPA、Botmux、日志均已接入。
+- `UpdateUi.py`：启动 5 秒后检查、每小时检查、菜单末项红点，
+  点击下载进度提示；离线后台静默、手动反馈，不与 Botmux 安装同时替换。
+- `app_update.py`：官方 GitHub latest API，匿名限流时使用官方 latest/download
+  manifest；严格版本/发行类型/平台选择，SHA256、发布清单、ZIP 路径与链接、
+  包内版本/资源/签名和冻结主程序自检，拒绝降级。随包携带 certifi CA，
+  不依赖构建机 Homebrew 证书；兼容 ditto 未标 UTF-8 的中文 ZIP 文件名。
+- `app_update_entry.py`：独立 onefile helper，退出前准备与授权握手，
+  等待旧进程退出后同目录原子替换，实际新版 PID/版本/nonce 健康回执；
+  失败回滚，保留 Inno 卸载资源，安装目标文件锁，下一次启动清理已完成过程目录。
+- macOS ZIP 首次启动可安装到 /Applications（不可写时 ~/Applications），
+  已存在版本不降级、不跨发行类型覆盖；DMG 增加 Applications 拖放入口。
+- 发布 workflow 与本地构建均打包独立更新 helper、增加冻结主程序 helper 自检；
+  Windows VIP 从自身独立复制的 embeddable Python 执行更新程序，
+  切换正式 EXE 后保留“启动希儿.vbs”入口；普通版启动刷新 RPA 的资源和设置路径。
+- 验证：98 项 Python 测试通过（含设置保留、SHA、ZIP/symlink、
+  平台选择、真实子进程健康回执、成功替换/失败回滚/父进程不退出、
+  菜单最后项和红点、离线与点击下载、匿名限流回退）；插件测试通过，
+  release YAML 解析与 diff 格式通过。
+- 在线只读验证成功：官方 latest 显示 2.3.1，mac_byte/arm64 三个版本资产
+  正确解析，真实 ZIP/清单下载 SHA256 与安全解压资源核验通过；临时副本已清理。
+- 冻结 macOS 完整事务实跑：重新解压 ZIP 严格签名与 GUI/helper smoke，
+  独立冻结 helper 准备、等待旧 PID 退出、原子替换、真实新版 GUI PID 健康回执、
+  角色保留、替换后严格签名均通过。使用临时目标和隔离数据，未替换工作区或本机应用。
+  冻结主程序在系统 CA 路径设为不存在时 HTTPS 检查通过，确认 certifi 随包可用。
+  当前 2.5.0 不会降级；普通用户菜单安装与未来更高版本点击更新仍待真机验收。
+- VIP 输出固定在 `vip-packages/Seele-2.5.0-vip-test-*.zip`，附 SHA256。
+  Windows EXE/WSL 安装、重启和授权仍需 Windows 真机验收。
+- 最终 mac_byte ZIP SHA256：
+  `be801c99522ef1858849d25802d742eb091b0ed7e4f5c988b4d959c16a78508f`。
+- 最终 windows_byte VIP ZIP SHA256：
+  `4b166d22df7aaa877b3ede3762ffec5f7e354cf3a2cca5249cf37bee6af4f2cc`。
+  两包 ZIP/摘要核验通过；Windows 包包含 certifi CA、独立 helper 源码与内置 Python。
+- 菜单视觉证据：`vip-packages/Seele-2.5.0-update-menu.png`，
+  模拟高版本红点，验证“检查更新”始终在底部；线上当前没有高于 2.5.0 的 Release。
+- 发布 CI 修正：首次 Windows CI 在 CP1252 输出中文安装提示时抛
+  `UnicodeEncodeError`，导致成功、重启和锁竞争分支异常退出。
+  `run_install()` 开始时将可配置 stdout/stderr 设为 UTF-8，
+  新增英文系统重定向输出与重启返回码回归，本地 99 项测试通过。
+  该失败触发矩阵 fail-fast；PR/分支 CI 修正后重新运行。
+
+## 2026-10-21 Windows 字节版 WSL 安装修复（2.4.0 本地待验收）
+
+用户授权按其成功部署指南直接修复 Windows 字节版。本批次仅本地修改；
+未提交、未推送、未发布。用户新增指南和 `.vscode/` 保留。
+
+- `windows_byte_bootstrap.py`：当前用户 WSL2 探测、普通用户复用/初始化、
+  窄范围 UAC 组件安装、原子进度、内核锁、重启续装任务及 HKCU Run 备用。
+- `windows_byte_linux.py`：合并 WSL 配置、官方 Botmux 二进制安装、
+  字节 CLI 安装与授权、插件、systemd/watchdog/linger、前台保活。
+- `botmux_setup_coach.py`：WSL 内调用 Windows PowerShell 播放原语音，
+  优先 Chrome 打开授权地址；文字参数用 UTF-16 编码脚本和单引号字面量传递。
+- `Seele.py`/`botmux_client.py`：Windows 字节版避开旧影刀首次安装，
+  菜单继续安装、后台 UNC Dashboard 发现、Qt 主线程更新连接。
+- Windows 打包矩阵分普通版/字节版，冻结独立 console helper，
+  主程序执行 helper 路径与 Linux 源资源自检；Inno 字节版独立目录与卸载任务。
+- 本地版本升为 2.4.0；线上仍为 2.3.1。安装说明见 `WINDOWS_BYTE_INSTALL.md`。
+
+验证：82 项 Python 测试通过，新增 16 项覆盖重启边界、续装、
+Windows 身份、并发锁、systemd 合并、保活恢复、浏览器与 UNC 路由。
+插件 build/validate/MCP smoke、Python 编译、diff 格式、离屏桌宠通过。
+PowerShell 7.4.6 解析安装脚本和 workflow 的 PowerShell 部分通过；
+release YAML 解析通过。仅语法校验，不代表 Windows 系统接口已实跑。
+
+本地 VIP：
+
+- `vip-packages/Seele-2.4.0-vip-test-windows_byte-x64-portable.zip`：
+  官方 Windows Python 3.11.9 embeddable + Windows Qt/wheels，
+  完整解压后双击 `启动希儿.vbs`；没有另装 Python 的前置要求。
+  ZIP CRC、资源清单、Python/Qt Windows DLL 校验通过。
+- `vip-packages/Seele-2.4.0-vip-test-mac_byte-macos-arm64.zip`：
+  本地 PyInstaller arm64，ad-hoc 严格签名、冻结主程序 smoke、
+  coach 路径 smoke 与 ZIP 校验通过。
+- 两包均带 `.zip.sha256`。构建脚本 `packaging/windows/build_vip.py` 和
+  `packaging/build_mac_vip.py` 只做本地产物，不发布。
+
+真实 Windows WSL 安装、重启/登录、账号授权、计划任务注册与
+Windows PyInstaller EXE 构建未在当前 macOS 主机执行。
+
 ## 远端基线
 
 - 仓库：`https://github.com/xinna2001/Seele`

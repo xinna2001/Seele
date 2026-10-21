@@ -21,11 +21,13 @@ import write_file as wf
 import ProgramsConfigWindow
 import RoleSwitchWindow
 import TaskPanelWindow
+import UpdateUi
 import botmux_client
 import mac_byte_bootstrap
+import windows_byte_bootstrap
 import rpa_bridge
 import rpa_service
-from platform_utils import get_base_dir as _platform_base_dir, open_external
+from platform_utils import data_path, migrate_settings, get_base_dir as _platform_base_dir, open_external
 from PyQt5.QtCore import Qt, QSize, QPoint, QObject, pyqtSignal
 from PyQt5.QtGui import QColor, QFontMetrics, QIcon, QPainter
 from PyQt5.QtCore import QRectF
@@ -59,6 +61,7 @@ class _IntegrationSignals(QObject):
     botmux_state = pyqtSignal(dict)
     rpa_event = pyqtSignal(dict)
     bootstrap_event = pyqtSignal(dict)
+    config_loaded = pyqtSignal(dict)
 
 def _apply_material_theme(app: QApplication) -> None:
     """
@@ -106,11 +109,22 @@ def get_base_dir():
     return str(_platform_base_dir())
 
 def _json_path(name):
-    return os.path.join(get_base_dir(), name)
+    return str(data_path(name))
 
+migrate_settings()
 dic = wf.read_dict_from_json(_json_path('state.json')) or {}
-if not mac_byte_bootstrap.is_mac_byte() and dic.get("initialize", "0") == "0":
+
+
+def _is_byte_edition() -> bool:
+    return mac_byte_bootstrap.is_mac_byte() or windows_byte_bootstrap.is_windows_byte()
+
+
+if (not _is_byte_edition() and dic.get("initialize", "0") == "0"
+        and os.environ.get("SEELE_EDITION") != "packaging-smoke"):
     initialize.run(get_base_dir())
+elif not _is_byte_edition() and os.environ.get("SEELE_EDITION") != "packaging-smoke":
+    # Existing RPA workflows read these links; refresh them after moving/updating.
+    initialize.set_file(get_base_dir())
 
 class _SpeechBubble(QWidget):
     """
@@ -328,10 +342,14 @@ class DesktopWife(QWidget):
         self._first_bubble_done = False
 
         self._Tray = Tray.TrayIcon(self)
+        self._updater = UpdateUi.UpdateController(self)
+        self._Tray.menu.addSeparator()
+        self._Tray.menu.addAction(self._updater.action(self._Tray.menu))
         self.outvoice = None
-        if not mac_byte_bootstrap.is_mac_byte():
+        if not _is_byte_edition():
             self.outvoice = OutVoice.main()
-        self._botmux_config = botmux_client.load_config()
+        self._botmux_config = botmux_client.load_config(discover=sys.platform != "win32")
+        self._config_refresh_thread = None
         self._botmux_state = {
             "connected": False,
             "kind": "offline",
@@ -346,6 +364,7 @@ class DesktopWife(QWidget):
         self._integration_signals.botmux_state.connect(self._handle_botmux_state)
         self._integration_signals.rpa_event.connect(self._handle_rpa_event)
         self._integration_signals.bootstrap_event.connect(self._handle_bootstrap_event)
+        self._integration_signals.config_loaded.connect(self._apply_botmux_config)
         self._unsubscribe_rpa_events = rpa_service.subscribe_job_events(
             self._integration_signals.rpa_event.emit,
         )
@@ -360,6 +379,32 @@ class DesktopWife(QWidget):
         self._bootstrap_thread = None
         QTimer.singleShot(0, self._start_integrations)
         QTimer.singleShot(1200, self.StartMacByteBootstrap)
+        QTimer.singleShot(1200, self.StartWindowsByteBootstrap)
+        self._dashboard_refresh_timer = QTimer(self)
+        self._dashboard_refresh_timer.setInterval(15000)
+        self._dashboard_refresh_timer.timeout.connect(self._refresh_botmux_config)
+        self._dashboard_refresh_timer.start()
+        QTimer.singleShot(0, self._refresh_botmux_config)
+
+    def _refresh_botmux_config(self) -> None:
+        if self._config_refresh_thread and self._config_refresh_thread.is_alive():
+            return
+        def read_config():
+            self._integration_signals.config_loaded.emit(botmux_client.load_config())
+        self._config_refresh_thread = threading.Thread(
+            target=read_config, name="seele-dashboard-discovery", daemon=True,
+        )
+        self._config_refresh_thread.start()
+
+    def _apply_botmux_config(self, config: dict) -> None:
+        if config == self._botmux_config:
+            return
+        self._botmux_monitor.stop()
+        self._botmux_config = config
+        self._botmux_monitor = botmux_client.BotmuxMonitor(
+            self._integration_signals.botmux_state.emit, config,
+        )
+        self._botmux_monitor.start()
 
     def _start_integrations(self) -> None:
         self._botmux_monitor.start()
@@ -495,6 +540,9 @@ class DesktopWife(QWidget):
     def StartMacByteBootstrap(self) -> None:
         if not mac_byte_bootstrap.is_mac_byte():
             return
+        if getattr(self, "_updater", None) and self._updater.busy:
+            QTimer.singleShot(3000, self.StartMacByteBootstrap)
+            return
         if self._bootstrap_thread and self._bootstrap_thread.is_alive():
             self._show_bubble_text("Botmux 安装终端已经打开。")
             return
@@ -504,6 +552,34 @@ class DesktopWife(QWidget):
             daemon=True,
         )
         self._bootstrap_thread.start()
+
+    def StartWindowsByteBootstrap(self, *, force: bool = False) -> None:
+        if not windows_byte_bootstrap.is_windows_byte():
+            return
+        if getattr(self, "_updater", None) and self._updater.busy:
+            QTimer.singleShot(3000, lambda: self.StartWindowsByteBootstrap(force=force))
+            return
+        if self._bootstrap_thread and self._bootstrap_thread.is_alive():
+            self._show_bubble_text("Botmux 安装终端已经打开。")
+            return
+        if not force and windows_byte_bootstrap.read_status().get("state") == "completed":
+            self._refresh_botmux_config()
+            return
+        self._bootstrap_thread = threading.Thread(
+            target=self._run_windows_byte_bootstrap,
+            name="seele-windows-byte-bootstrap", daemon=True,
+        )
+        self._bootstrap_thread.start()
+
+    def _run_windows_byte_bootstrap(self) -> None:
+        try:
+            windows_byte_bootstrap.launch_and_wait(
+                self._integration_signals.bootstrap_event.emit,
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            self._integration_signals.bootstrap_event.emit({
+                "state": "failed", "message": str(exc),
+            })
 
     def _run_mac_byte_bootstrap(self) -> None:
         retries_left = 1
@@ -550,7 +626,12 @@ class DesktopWife(QWidget):
 
     def _handle_bootstrap_event(self, event: dict) -> None:
         state = event.get("state")
-        if state == "launched":
+        if state == "waiting_reboot":
+            QMessageBox.information(self, "WSL 安装进度已保存",
+                                    event.get("message") or "请重启 Windows，登录后自动继续。")
+        elif state in {"running", "failed"} and event.get("message"):
+            self._show_bubble_text(str(event["message"]))
+        elif state == "launched":
             if event.get("mode") == "full":
                 text = "未检测到 Botmux，已打开安装终端。登录时请按终端提示操作。"
             elif event.get("mode") == "repair":
@@ -567,6 +648,7 @@ class DesktopWife(QWidget):
                 text = "安装终端提前结束，正在重新打开终端继续安装。"
             self._show_bubble_text(text)
         elif state == "completed":
+            self._refresh_botmux_config()
             self._show_bubble_text("Botmux 安装流程已完成。")
         elif state == "error":
             self._show_bubble_text(f"Botmux 安装启动失败：{event.get('message') or '未知错误'}")
@@ -575,6 +657,10 @@ class DesktopWife(QWidget):
         VoiceToText.request_input()
 
     def shutdown(self) -> None:
+        if hasattr(self, "_updater"):
+            self._updater.stop()
+        if hasattr(self, "_dashboard_refresh_timer"):
+            self._dashboard_refresh_timer.stop()
         VoiceToText.stop()
         self._botmux_monitor.stop()
         self._rpa_bridge.stop()
@@ -760,7 +846,7 @@ class DesktopWife(QWidget):
             "QMenu::separator { height: 1px; background: rgba(20, 30, 50, 24); margin: 5px 8px; }"
         )
 
-        show_legacy_controls = not mac_byte_bootstrap.is_mac_byte()
+        show_legacy_controls = not _is_byte_edition()
         if show_legacy_controls:
             self.custom_voice = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"自定义语音唤醒", self)
             self.Menu.addAction(self.custom_voice)
@@ -786,12 +872,17 @@ class DesktopWife(QWidget):
 
         self.botmux_dashboard = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"打开 Botmux", self)
         self.Menu.addAction(self.botmux_dashboard)
+        if windows_byte_bootstrap.is_windows_byte():
+            resume = self.Menu.addAction("继续 Botmux 安装")
+            resume.triggered.connect(lambda: self.StartWindowsByteBootstrap(force=True))
 
         self.StartTray = QAction(QIcon(os.path.join(get_base_dir(), "image", "bs_icon.png")), u"退置托盘", self)
         self.Menu.addAction(self.StartTray)
 
         self.CloseWindowAction = QAction(QIcon(os.path.join(get_base_dir(), "image", "Quit.png")), u"退出程序", self)
         self.Menu.addAction(self.CloseWindowAction)
+        self.Menu.addSeparator()
+        self.Menu.addAction(self._updater.action(self.Menu))
 
         if show_legacy_controls:
             self.out_voice.triggered.connect(self.WeatherForecast)
@@ -954,6 +1045,10 @@ def main():
     # Aggressive warm-up before showing any UI (no visible flash).
     Window._warmup_bubble_hidden()
     Window.show()
+    if os.environ.get("SEELE_UPDATE_HEALTH"):
+        import app_update
+        path, nonce = os.environ["SEELE_UPDATE_HEALTH"].split("|", 1)
+        QTimer.singleShot(1500, lambda: app_update.write_health(path, nonce))
     ready_file = os.environ.get("SEELE_READY_FILE")
     if ready_file:
         try:
@@ -962,7 +1057,7 @@ def main():
                 pass
         except OSError:
             pass
-    if not mac_byte_bootstrap.is_mac_byte():
+    if not _is_byte_edition():
         VoiceToText.run()
     app.exec_()
 

@@ -40,6 +40,14 @@ def _run_splash(ready_file):
 def _run_smoke_test():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     os.environ["SEELE_EDITION"] = "packaging-smoke"
+    os.environ["SEELE_DISABLE_UPDATES"] = "1"
+    if not os.environ.get("SEELE_DATA_DIR"):
+        with tempfile.TemporaryDirectory(prefix="seele-smoke-") as directory:
+            os.environ["SEELE_DATA_DIR"] = directory
+            try:
+                return _run_smoke_test()
+            finally:
+                os.environ.pop("SEELE_DATA_DIR", None)
     from PyQt5.QtWidgets import QApplication
     import Seele
 
@@ -61,12 +69,45 @@ def _run_botmux_coach_smoke_test():
     return 0 if helper.is_file() and os.access(helper, os.X_OK) else 1
 
 
+def _run_windows_bootstrap_smoke_test():
+    import windows_byte_bootstrap
+
+    command = windows_byte_bootstrap.helper_command()
+    result = subprocess.run([*command, "--self-check"], timeout=45,
+                            **hidden_subprocess_kwargs())
+    return result.returncode
+
+
 def main():
     argv = sys.argv[1:]
+    if len(argv) == 3 and argv[0] == "--update-health":
+        os.environ["SEELE_UPDATE_HEALTH"] = argv[1] + "|" + argv[2]
+        argv = []
+    if "--windows-byte" in argv:
+        os.environ["SEELE_EDITION"] = "windows_byte"
+        argv = [arg for arg in argv if arg != "--windows-byte"]
     if argv == ["--smoke-test"]:
         return _run_smoke_test()
+    if argv == ["--updater-network-smoke-test"]:
+        import app_update
+        result = app_update.check_release()
+        print("GitHub check passed:", result.version if result else "no newer release")
+        return 0
+    if argv == ["--updater-smoke-test"]:
+        import app_update
+        helper = app_update.helper_path()
+        if not getattr(sys, "frozen", False) and sys.platform == "win32":
+            entry = app_update.app_path("app_update_entry.py")
+            return subprocess.run([sys.executable, str(entry), "--self-check"],
+                                  timeout=45, **hidden_subprocess_kwargs()).returncode
+        if not helper.is_file() or not os.access(helper, os.X_OK):
+            return 1
+        return subprocess.run([str(helper), "--self-check"], timeout=45,
+                              **hidden_subprocess_kwargs()).returncode
     if argv == ["--botmux-coach-smoke-test"]:
         return _run_botmux_coach_smoke_test()
+    if argv == ["--windows-bootstrap-smoke-test"]:
+        return _run_windows_bootstrap_smoke_test()
     if argv and argv[0] == "--botmux-setup-coach":
         import botmux_setup_coach
         return botmux_setup_coach.main(argv[1:])
