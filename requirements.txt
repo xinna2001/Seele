@@ -4,6 +4,7 @@ pyinstaller>=6.11,<7
 qt-material>=2.14,<3
 sounddevice>=0.5,<1
 soundfile>=0.13,<1
+certifi>=2024.2
 
 # Windows-only helpers used by packaging and native integrations.
 PyAutoGUI>=0.9.54,<1; sys_platform == "win32"

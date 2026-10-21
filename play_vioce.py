@@ -1,5 +1,5 @@
 import write_file as wf
-from platform_utils import app_path
+from platform_utils import app_path, data_path
 
 try:
     import sounddevice as sd
@@ -20,7 +20,7 @@ def main(file_name):
         return
 
 def yingdao_main(yingdao_name,file_name,is_finish=False):
-    state_path = app_path("state.json")
+    state_path = data_path("state.json")
     dic = wf.read_dict_from_json(state_path) or {}
     if dic.get(yingdao_name)=="0":
         main(file_name)

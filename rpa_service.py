@@ -15,6 +15,8 @@ from typing import Callable
 
 from platform_utils import (
     app_path,
+    get_data_dir,
+    migrate_settings,
     get_tools_dir,
     open_external,
     platform_label,
@@ -61,7 +63,9 @@ def _read_json(path: Path) -> dict:
 
 
 def list_workflows(base_dir: Path | None = None) -> list[WorkflowDefinition]:
-    root = base_dir or app_path()
+    if base_dir is None:
+        migrate_settings()
+    root = base_dir or get_data_dir()
     uids = _read_json(root / "uid.json")
     trigger_files = _read_json(root / "file_name.json")
     names = sorted(set(uids) | set(trigger_files))
@@ -207,7 +211,9 @@ def _trigger_workflow_unlocked(
     base_dir: Path | None = None,
     tools_dir: Path | None = None,
 ) -> WorkflowResult:
-    root = base_dir or app_path()
+    if base_dir is None:
+        migrate_settings()
+    root = base_dir or get_data_dir()
     tools = tools_dir or get_tools_dir()
     workflow = resolve_workflow(name_or_id, root)
     request_id = str(request_id or uuid.uuid4())

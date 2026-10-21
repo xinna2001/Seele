@@ -1,7 +1,7 @@
 import sys
 import os
 import write_file
-from platform_utils import get_base_dir as _platform_base_dir
+from platform_utils import data_path, get_base_dir as _platform_base_dir
 from PyQt5.QtCore import Qt, QRectF
 from PyQt5.QtGui import QIcon, QPixmap, QPainter, QPainterPath
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QMessageBox, QLabel, QFrame
@@ -73,14 +73,14 @@ class main(QWidget):
         self.setLayout(root_layout)
 
     def YesEvent(self) -> None:
-        path = os.path.join(get_base_dir(), "state.json")
+        path = data_path("state.json")
         dic = write_file.read_dict_from_json(path) or {}
         dic["stt_state"] = "True"
         write_file.write_dict_to_json(dic, path)
         self.close()
 
     def hide_event(self) -> None:
-        path = os.path.join(get_base_dir(), "state.json")
+        path = data_path("state.json")
         dic = write_file.read_dict_from_json(path) or {}
         dic["stt_state"] = "False"
         write_file.write_dict_to_json(dic, path)

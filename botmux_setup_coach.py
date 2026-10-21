@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import codecs
+import base64
 import errno
 import os
 import re
@@ -108,8 +109,35 @@ def _normalize_login_url(candidate: str) -> str | None:
     return value
 
 
+def _wsl_powershell(script: str) -> list[str] | None:
+    if os.environ.get("SEELE_WINDOWS_WSL") != "1":
+        return None
+    executable = shutil.which("powershell.exe")
+    if not executable:
+        fallback = Path("/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe")
+        if fallback.is_file():
+            executable = str(fallback)
+    if not executable:
+        return None
+    encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+    return [executable, "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded]
+
+
+def _ps_string(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
 def open_login_url(url: str) -> bool:
-    commands = [
+    wsl = _wsl_powershell(f"""
+$url = {_ps_string(url)}
+$chrome = @("$env:ProgramFiles\\Google\\Chrome\\Application\\chrome.exe",
+            "${{env:ProgramFiles(x86)}}\\Google\\Chrome\\Application\\chrome.exe",
+            "$env:LOCALAPPDATA\\Google\\Chrome\\Application\\chrome.exe") |
+  Where-Object {{ Test-Path $_ }} | Select-Object -First 1
+if ($chrome) {{ Start-Process -FilePath $chrome -ArgumentList $url }}
+else {{ Start-Process $url }}
+""")
+    commands = [wsl] if wsl else [
         ["/usr/bin/open", "-a", "Google Chrome", url],
         ["/usr/bin/open", url],
     ]
@@ -137,6 +165,9 @@ def focus_terminal_for_login() -> bool:
         sys.stdout.flush()
     except OSError:
         pass
+    if os.environ.get("SEELE_WINDOWS_WSL") == "1":
+        # The Windows installer already owns a visible console. Keep its output.
+        return True
     try:
         result = subprocess.run(
             [
@@ -424,7 +455,28 @@ class VoicePlayer:
             path = Path(resources) / "audio" / "mac_byte" / cue.filename
         else:
             path = app_path("audio", "mac_byte", cue.filename)
-        if path.is_file() and Path("/usr/bin/afplay").is_file():
+        wsl = None
+        if os.environ.get("SEELE_WINDOWS_WSL") == "1":
+            try:
+                windows_path = subprocess.run(
+                    ["wslpath", "-w", str(path)], capture_output=True,
+                    text=True, check=True, timeout=5,
+                ).stdout.strip()
+                wsl = _wsl_powershell(f"""
+if (Test-Path {_ps_string(windows_path)}) {{
+  $player = New-Object System.Media.SoundPlayer {_ps_string(windows_path)}
+  $player.PlaySync()
+}} else {{
+  Add-Type -AssemblyName System.Speech
+  $speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer
+  $speaker.Speak({_ps_string(cue.text)})
+}}
+""")
+            except (OSError, subprocess.SubprocessError):
+                pass
+        if wsl:
+            command = wsl
+        elif path.is_file() and Path("/usr/bin/afplay").is_file():
             command = ["/usr/bin/afplay", str(path)]
         elif Path("/usr/bin/say").is_file():
             command = ["/usr/bin/say", cue.text]

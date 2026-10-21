@@ -1,10 +1,10 @@
 import time
-from platform_utils import app_path
+from platform_utils import get_data_dir
 
 class ProgramLog:
     def __init__(self):
         self._time = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
-        log_dir = app_path("Log")
+        log_dir = get_data_dir() / "Log"
         log_dir.mkdir(parents=True, exist_ok=True)
         self.FileName = log_dir / f"{time.strftime('%Y-%m-%d', time.gmtime())}.log"
         self.FileName.touch(exist_ok=True)

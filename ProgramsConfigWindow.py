@@ -2,7 +2,7 @@ import json
 import os
 import sys
 import write_file as wf
-from platform_utils import get_base_dir as _platform_base_dir
+from platform_utils import data_path, get_base_dir as _platform_base_dir
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtWidgets import QPushButton
 from PyQt5.QtWidgets import QLabel
@@ -17,7 +17,7 @@ def get_base_dir():
     return str(_platform_base_dir())
 
 def _json_path(name: str) -> str:
-    return os.path.join(get_base_dir(), name)
+    return str(data_path(name))
 
 
 class ManageWakeWordsWindow(QWidget):

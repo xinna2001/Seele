@@ -1,4 +1,6 @@
 import json
+from pathlib import Path
+from platform_utils import atomic_json
 
 
 def write_dict_to_json(dictionary, file_path):
@@ -10,8 +12,7 @@ def write_dict_to_json(dictionary, file_path):
     if not isinstance(dictionary, dict):
         return
     try:
-        with open(file_path, 'w', encoding='utf-8') as file:
-            json.dump(dictionary, file, ensure_ascii=False, indent=4)
+        atomic_json(Path(file_path), dictionary)
     except Exception as e:
         print(f"写入文件时出错: {e}")
 
@@ -35,4 +36,3 @@ def read_dict_from_json(file_path):
     except Exception as e:
         print(f"读取文件时出错: {e}")
     return None
-    

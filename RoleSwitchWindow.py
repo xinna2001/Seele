@@ -2,7 +2,7 @@ import os
 import random
 import sys
 import write_file as wf
-from platform_utils import get_base_dir as _platform_base_dir
+from platform_utils import data_path, get_base_dir as _platform_base_dir
 
 from PyQt5.QtCore import Qt, QPoint, QRectF, QSize
 from PyQt5.QtGui import QCursor, QIcon, QPainter, QPainterPath, QPixmap
@@ -28,7 +28,7 @@ def get_base_dir():
 
 
 def _json_path(name):
-    return os.path.join(get_base_dir(), name)
+    return str(data_path(name))
 
 
 def _responsive_window_size(

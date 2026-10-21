@@ -7,7 +7,7 @@ import play_vioce as pv
 import falseIntent as fi
 import botmux_client
 import rpa_service
-from platform_utils import app_path, get_base_dir as _get_base_dir, get_tools_dir
+from platform_utils import app_path, data_path, get_base_dir as _get_base_dir, get_tools_dir
 
 try:
     import keyboard
@@ -36,7 +36,7 @@ def get_tools_folder_path():
 
 
 def _json_path(name):
-    return str(app_path(name))
+    return str(data_path(name))
 
 
 # Cross-thread input requests: keyboard callback thread -> Qt main thread.

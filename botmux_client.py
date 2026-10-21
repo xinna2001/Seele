@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import threading
 import time
 import uuid
@@ -14,7 +15,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from platform_utils import app_path
+from platform_utils import app_path, data_path
 
 
 DEFAULT_CONFIG = {
@@ -61,7 +62,7 @@ def discover_local_dashboard(botmux_home: str | os.PathLike | None = None) -> di
     info: dict = {}
     try:
         port = (base / ".dashboard-port").read_text(encoding="utf-8").strip()
-        if port.isdigit():
+        if port.isdigit() and 1 <= int(port) <= 65535:
             info["port"] = int(port)
     except (OSError, ValueError):
         pass
@@ -71,7 +72,28 @@ def discover_local_dashboard(botmux_home: str | os.PathLike | None = None) -> di
             info["token"] = token
     except OSError:
         pass
+    if not info and botmux_home is None and sys.platform == "win32":
+        info = discover_wsl_dashboard()
     return info
+
+
+def discover_wsl_dashboard() -> dict:
+    """Use the selected user's UNC files; never copy WSL credentials to Windows."""
+    from windows_byte_bootstrap import read_status
+
+    status = read_status()
+    distro = status.get("distro")
+    home = status.get("linux_home")
+    if (not isinstance(distro, str) or not distro or any(c in distro for c in "\\/:")
+            or not isinstance(home, str) or not home.startswith("/")
+            or "\\" in home or ".." in home.split("/")):
+        return {}
+    for prefix in ("wsl.localhost", "wsl$"):
+        base = Path(f"\\\\{prefix}\\{distro}" + home.replace("/", "\\") + "\\.botmux")
+        found = discover_local_dashboard(base)
+        if found:
+            return found
+    return {}
 
 
 def load_config(
@@ -79,7 +101,7 @@ def load_config(
     *,
     discover: bool = True,
 ) -> dict:
-    config_path = Path(path) if path else app_path("botmux_config.json")
+    config_path = Path(path) if path else data_path("botmux_config.json")
     raw = {}
     try:
         with config_path.open("r", encoding="utf-8") as file:
@@ -513,6 +535,8 @@ class BotmuxMonitor:
             try:
                 client = BotmuxClient(self.config)
                 state.replace(client.get_sessions())
+                if self.stop_event.is_set():
+                    return
                 self.callback(state.summary())
                 backoff = 1
                 if not self.config.get("events_enabled", True):
@@ -524,6 +548,8 @@ class BotmuxMonitor:
                 if self.stop_event.is_set():
                     return
             except (BotmuxError, TypeError, ValueError) as exc:
+                if self.stop_event.is_set():
+                    return
                 self.callback(state.summary(connected=False, error=str(exc)))
                 self.stop_event.wait(backoff)
                 backoff = min(backoff * 2, 30)

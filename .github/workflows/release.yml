@@ -16,8 +16,11 @@ permissions:
 
 jobs:
   package-windows:
-    name: Package Windows x64
+    name: Package ${{ matrix.edition }} x64
     runs-on: windows-latest
+    strategy:
+      matrix:
+        edition: [windows, windows_byte]
     environment:
       name: windows-packaging
       url: ${{ github.server_url }}/${{ github.repository }}/releases
@@ -64,13 +67,30 @@ jobs:
         shell: pwsh
         env:
           APP_VERSION: ${{ steps.version.outputs.version }}
+          APP_EDITION: ${{ matrix.edition }}
         run: |
+          $env:APP_VERSION | Set-Content -Encoding ascii VERSION
+          $env:APP_EDITION | Set-Content -Encoding ascii EDITION
           $versionTuple = (($env:APP_VERSION -split '\.') + '0') -join ', '
           $versionInfo = Get-Content "packaging/windows/version_info.txt" -Raw
           $versionInfo = $versionInfo -replace '\(\d+,\s*\d+,\s*\d+,\s*0\)', "($versionTuple)"
           $versionInfo = $versionInfo -replace "u'\d+\.\d+\.\d+'", "u'$env:APP_VERSION'"
           New-Item -ItemType Directory -Force -Path build | Out-Null
           $versionInfo | Set-Content -Encoding utf8 "build/windows-version-info.txt"
+
+          python -m PyInstaller --noconfirm --clean --onefile --console `
+            --name SeeleUpdater --distpath build/updater-helper `
+            --workpath build/updater-helper-work --specpath build `
+            app_update_entry.py
+          if ($LASTEXITCODE -ne 0) { throw "Updater helper build failed." }
+
+          if ($env:APP_EDITION -eq "windows_byte") {
+            python -m PyInstaller --noconfirm --clean --onefile --console `
+              --name SeeleWindowsBootstrap --distpath build/windows-helper `
+              --workpath build/windows-helper-work --specpath build `
+              windows_byte_bootstrap.py
+            if ($LASTEXITCODE -ne 0) { throw "Windows bootstrap helper build failed." }
+          }
 
           python -m PyInstaller `
             --noconfirm `
@@ -96,12 +116,26 @@ jobs:
             --add-data "DEVELOPMENT_LOG.md;." `
             --add-data "MAC_BYTE_AUTO_INSTALL_COMMANDS.md;." `
             --add-data "MAC_BYTE_ZERO_TOUCH_RESEARCH.md;." `
+            --add-data "WINDOWS_BYTE_INSTALL.md;." `
+            --add-data "windows_byte_linux.py;." `
+            --add-data "botmux_setup_coach.py;." `
+            --add-data "platform_utils.py;." `
             --add-data "EDITION;." `
             --add-data "VERSION;." `
             --add-data "LICENSE;." `
             run_exe.py
           if (-not (Test-Path "dist/Seele/Seele.exe")) {
             throw "PyInstaller did not produce dist/Seele/Seele.exe"
+          }
+          New-Item -ItemType Directory -Force -Path dist/Seele/bin | Out-Null
+          Copy-Item build/updater-helper/SeeleUpdater.exe dist/Seele/bin/
+          & "dist/Seele/Seele.exe" --updater-smoke-test
+          if ($LASTEXITCODE -ne 0) { throw "Packaged updater smoke test failed." }
+          if ($env:APP_EDITION -eq "windows_byte") {
+            New-Item -ItemType Directory -Force -Path dist/Seele/bin | Out-Null
+            Copy-Item build/windows-helper/SeeleWindowsBootstrap.exe dist/Seele/bin/
+            & "dist/Seele/Seele.exe" --windows-bootstrap-smoke-test
+            if ($LASTEXITCODE -ne 0) { throw "Packaged WSL resource/helper smoke test failed." }
           }
           $env:QT_QPA_PLATFORM = "offscreen"
           & "dist/Seele/Seele.exe" --smoke-test
@@ -113,18 +147,19 @@ jobs:
         shell: pwsh
         env:
           APP_VERSION: ${{ steps.version.outputs.version }}
+          APP_EDITION: ${{ matrix.edition }}
         run: |
           New-Item -ItemType Directory -Force -Path release | Out-Null
           Compress-Archive `
             -Path "dist/Seele" `
-            -DestinationPath "release/Seele-$env:APP_VERSION-windows-x64-portable.zip" `
+            -DestinationPath "release/Seele-$env:APP_VERSION-$env:APP_EDITION-x64-portable.zip" `
             -CompressionLevel Optimal
 
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) {
             throw "Inno Setup compiler was not found."
           }
-          & $iscc "/DMyAppVersion=$env:APP_VERSION" "packaging\windows\Seele.iss"
+          & $iscc "/DMyAppVersion=$env:APP_VERSION" "/DMyEdition=$env:APP_EDITION" "packaging\windows\Seele.iss"
           if ($LASTEXITCODE -ne 0) {
             throw "Inno Setup failed with exit code $LASTEXITCODE"
           }
@@ -132,23 +167,24 @@ jobs:
           $manifest = @{
             product = "Seele"
             version = $env:APP_VERSION
+            edition = $env:APP_EDITION
             commit = $env:GITHUB_SHA
             platform = "windows-x64"
             built_at = (Get-Date).ToUniversalTime().ToString("o")
           } | ConvertTo-Json
-          $manifest | Set-Content -Encoding utf8 "release/release-manifest-windows.json"
+          $manifest | Set-Content -Encoding utf8 "release/release-manifest-$env:APP_EDITION.json"
 
           Get-ChildItem release -File |
-            Where-Object { $_.Name -ne "SHA256SUMS-windows.txt" } |
+            Where-Object { $_.Name -ne "SHA256SUMS-$env:APP_EDITION.txt" } |
             Sort-Object Name |
             ForEach-Object {
               $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
               "$hash  $($_.Name)"
-            } | Set-Content -Encoding ascii "release/SHA256SUMS-windows.txt"
+            } | Set-Content -Encoding ascii "release/SHA256SUMS-$env:APP_EDITION.txt"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Seele-${{ steps.version.outputs.version }}-windows
+          name: Seele-${{ steps.version.outputs.version }}-${{ matrix.edition }}
           path: release/*
           if-no-files-found: error
 
@@ -223,6 +259,8 @@ jobs:
           APP_VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
+          printf '%s\n' "$APP_VERSION" > VERSION
+          printf '%s\n' mac_byte > EDITION
           mkdir -p build/coach-spec
           python -m PyInstaller \
             --noconfirm \
@@ -234,6 +272,12 @@ jobs:
             --workpath build/coach-work \
             --specpath build/coach-spec \
             botmux_setup_coach_entry.py
+
+          python -m PyInstaller \
+            --noconfirm --clean --onefile --console \
+            --name SeeleUpdater --distpath build/updater-dist \
+            --workpath build/updater-work --specpath build/coach-spec \
+            app_update_entry.py
 
           python -m PyInstaller \
             --noconfirm \
@@ -268,6 +312,8 @@ jobs:
           cp "build/coach-dist/SeeleBotmuxCoach" \
             "dist/Seele.app/Contents/Resources/bin/SeeleBotmuxCoach"
           chmod 755 "dist/Seele.app/Contents/Resources/bin/SeeleBotmuxCoach"
+          cp "build/updater-dist/SeeleUpdater" "dist/Seele.app/Contents/Resources/bin/SeeleUpdater"
+          chmod 755 "dist/Seele.app/Contents/Resources/bin/SeeleUpdater"
           script -q /dev/null \
             env "SEELE_RESOURCES_DIR=$PWD/dist/Seele.app/Contents/Resources" \
             "dist/Seele.app/Contents/Resources/bin/SeeleBotmuxCoach" \
@@ -282,6 +328,7 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "dist/Seele.app"
           QT_QPA_PLATFORM=offscreen "dist/Seele.app/Contents/MacOS/Seele" --smoke-test
           "dist/Seele.app/Contents/MacOS/Seele" --botmux-coach-smoke-test
+          "dist/Seele.app/Contents/MacOS/Seele" --updater-smoke-test
 
       - name: Build mac_byte DMG, ZIP, and checksums
         shell: bash
@@ -293,9 +340,12 @@ jobs:
           zip_path="release/Seele-${APP_VERSION}-mac_byte-macos-arm64.zip"
           dmg_path="release/Seele-${APP_VERSION}-mac_byte-macos-arm64.dmg"
           ditto -c -k --sequesterRsrc --keepParent "dist/Seele.app" "$zip_path"
+          mkdir -p build/dmg-content
+          ditto "dist/Seele.app" "build/dmg-content/Seele.app"
+          ln -s /Applications "build/dmg-content/Applications"
           hdiutil create \
             -volname "Seele ${APP_VERSION} mac_byte" \
-            -srcfolder "dist/Seele.app" \
+            -srcfolder "build/dmg-content" \
             -ov \
             -format UDZO \
             "$dmg_path"
@@ -341,7 +391,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: Seele-${{ needs.package-windows.outputs.version }}-windows
+          pattern: Seele-${{ needs.package-windows.outputs.version }}-windows*
+          merge-multiple: true
           path: release
       - uses: actions/download-artifact@v4
         with:
@@ -360,6 +411,13 @@ jobs:
 
           ### 本版新增
 
+          - 启动后及每小时自动检查 GitHub 正式新版；右键最后的「检查更新」出现红点，点击自动下载、校验、替换并重启。
+          - 角色、语音和 Botmux 设置迁移到当前用户的 Seele 数据目录，更新后保留；新版启动失败自动回滚。
+          - macOS ZIP 首次打开可安装到应用程序目录，DMG 提供 Applications 拖放入口。
+          - Windows 字节版新增 WSL2 检测、缺失安装、重启保存进度与同用户登录续装。
+          - 复用原 Ubuntu、Linux 普通用户和机器人配置；字节 CLI 授权网页在 Windows 打开。
+          - systemd/watchdog/linger 配合 Windows 登录任务、恢复触发器和前台保活，自动恢复 Botmux。
+          - 桌宠自动读取选定 WSL 用户的 Dashboard 动态配置，安装完成与地址变化后重连。
           - 新增「任务面板」：桌宠右键菜单打开独立窗口，展示最近 24 小时内有活动的 Botmux 任务（最初发起者、会话、机器人、标题、状态、相对活动时间），点击任意任务直接跳转到对应飞书话题。
           - 任务状态归纳为「进行中 / 等你回复 / 空闲」三类，仅接受 applink.feishu.cn 深链跳转。
           - 桌宠自动发现本机 Botmux Dashboard（读取 ~/.botmux 的端口与读取令牌），无需随包附带配置即可连通。
@@ -388,6 +446,8 @@ jobs:
 
           - \`Seele-${VERSION}-windows-x64-setup.exe\`：Windows 安装版
           - \`Seele-${VERSION}-windows-x64-portable.zip\`：Windows 便携版
+          - \`Seele-${VERSION}-windows_byte-x64-setup.exe\`：Windows 字节版安装包
+          - \`Seele-${VERSION}-windows_byte-x64-portable.zip\`：Windows 字节版便携包
           - \`Seele-${VERSION}-mac_byte-macos-arm64.dmg\`：字节内部 Apple Silicon 安装版
           - \`Seele-${VERSION}-mac_byte-macos-arm64.zip\`：字节内部 Apple Silicon 压缩包
           - \`Seele-mac_byte-macos-arm64.dmg\` / \`.zip\`：供文档长期引用、始终指向当前 Release 的稳定文件名
