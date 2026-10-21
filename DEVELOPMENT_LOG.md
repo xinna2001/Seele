@@ -10,7 +10,7 @@
 - 不在本文记录 Token、Cookie、账号、内网凭据或其他秘密。
 - 不删除远端 Release、Tag 或回退远端分支，除非用户明确批准。
 
-## 2026-10-21 安装、自动更新与设置保留（2.5.0 发布准备）
+## 2026-10-21 安装、自动更新与设置保留（2.5.0）
 
 用户授权实现启动联网检查、右键最后“检查更新”红点、点击下载安装重启、
 设置移出应用包。本批次包含上一个未发布的 Windows 字节版改动；
@@ -63,10 +63,40 @@
   新增英文系统重定向输出与重启返回码回归，本地 99 项测试通过。
   该失败触发矩阵 fail-fast；PR/分支 CI 修正后重新运行。
 
-## 2026-10-21 Windows 字节版 WSL 安装修复（2.4.0 本地待验收）
+### 合并与发布
 
-用户授权按其成功部署指南直接修复 Windows 字节版。本批次仅本地修改；
-未提交、未推送、未发布。用户新增指南和 `.vscode/` 保留。
+- 功能分支 `feat/app-update-and-install-v2.5.0` 保留，使用 PR 合并；
+  PR：`https://github.com/xinna2001/Seele/pull/4`。
+- 合并提交：`b90311b34a8b2fd4e3e5d54a442dfedf66c37cad`。
+- 修正后分支 CI `39589263698`、PR CI `39589274260`、
+  合并后主分支 CI `39589597096` 的 Windows、macOS、Ubuntu 检查全部通过。
+- `v2.5.0` 指向上述合并提交；Tag CI `39589727219` 三个平台通过，
+  打包工作流 `39589727338` 的 mac_byte、windows、windows_byte 和发布均成功。
+- 正式 Release：`https://github.com/xinna2001/Seele/releases/tag/v2.5.0`；
+  官方 latest 已为 2.5.0，14 个附件全部 uploaded。
+- 三份发布清单的版本、edition、平台、提交与 SHA256 通过，
+  清单所列资产摘要均与 GitHub 计算的 digest 一致。
+  三种类型从 2.3.1 正确选择 2.5.0 ZIP，当前 2.5.0 不重复更新。
+- 线上 mac_byte ZIP：真实 `stage_release` 下载、SHA256、安全解压、
+  严格签名、冻结桌宠 GUI 和更新 helper 自检通过；
+  冻结主程序 coach 路径自检与缺失系统 CA 下 HTTPS 检查通过。
+- 线上两个 Windows ZIP：真实下载、SHA256、全量 ZIP CRC、安全解压、
+  包内版本/edition/桌宠资源与 EXE/helper 校验通过；
+  windows_byte 的 WSL helper 与 Linux 源资源齐全。
+- 正式 ZIP SHA256：
+  - mac_byte：`836bf587468cf28f5d56b69aa7874533d6009200ae33ac9ccf2cec3d0de052cc`。
+  - windows：`e1804a94368e3f8980974fa38455505dd6ecdb45ccc9b8b2dcc922ab6d37ec55`。
+  - windows_byte：`734ba491f6d88b477af97552c3778e9707dab065f57f1301fa9d9f61fdeb20e3`。
+- 线上验证使用临时目录和隔离用户数据；下载、解压与自检数据已物理清理。
+  原有 VIP 包及用户未跟踪文件保留。
+- 2.3.1 及更早正式包需要手动升级到 2.5.0 一次，之后可使用自动更新。
+- Windows 真实 WSL 安装、重启和本人授权仍待 Windows 真机验收；
+  CI、打包与资源自检不替代该验收。
+
+## 2026-10-21 Windows 字节版 WSL 安装修复（2.4.0 本地验证，已并入 2.5.0）
+
+用户授权按其成功部署指南直接修复 Windows 字节版。下文保留本地 2.4.0
+阶段验证记录；随后随 2.5.0 经 PR 合并和发布。用户新增指南和 `.vscode/` 保留。
 
 - `windows_byte_bootstrap.py`：当前用户 WSL2 探测、普通用户复用/初始化、
   窄范围 UAC 组件安装、原子进度、内核锁、重启续装任务及 HKCU Run 备用。
@@ -78,7 +108,8 @@
   菜单继续安装、后台 UNC Dashboard 发现、Qt 主线程更新连接。
 - Windows 打包矩阵分普通版/字节版，冻结独立 console helper，
   主程序执行 helper 路径与 Linux 源资源自检；Inno 字节版独立目录与卸载任务。
-- 本地版本升为 2.4.0；线上仍为 2.3.1。安装说明见 `WINDOWS_BYTE_INSTALL.md`。
+- 该阶段本地版本升为 2.4.0、线上为 2.3.1；当前正式版为 2.5.0。
+  安装说明见 `WINDOWS_BYTE_INSTALL.md`。
 
 验证：82 项 Python 测试通过，新增 16 项覆盖重启边界、续装、
 Windows 身份、并发锁、systemd 合并、保活恢复、浏览器与 UNC 路由。
@@ -105,6 +136,8 @@ Windows PyInstaller EXE 构建未在当前 macOS 主机执行。
 
 - 仓库：`https://github.com/xinna2001/Seele`
 - 当前分支：`main`
+- 当前正式版 `v2.5.0` 发布提交：`b90311b34a8b2fd4e3e5d54a442dfedf66c37cad`
+- `v2.5.0` Release：`https://github.com/xinna2001/Seele/releases/tag/v2.5.0`。
 - `v2.2.3` 发布提交：`6169d28`
 - `v2.2.2` 发布提交：`cf7c73e`
 - `v2.2.1` 发布提交：`e9b5693`
@@ -118,7 +151,8 @@ Windows PyInstaller EXE 构建未在当前 macOS 主机执行。
 - `v2.0.0` 发布基线提交：`8588a7d`
 - `v1.0.0`：提交 `0619912`
 - GitHub 已存在 `v1.0.0`、`v2.0.0`、`v2.0.1`、`v2.0.3`、`v2.1.0`、
-  `v2.1.1`、`v2.2.0`、`v2.2.1`、`v2.2.2` 和 `v2.2.3` Release。
+  `v2.1.1`、`v2.2.0`、`v2.2.1`、`v2.2.2`、`v2.2.3`、
+  `v2.3.0`、`v2.3.1` 和 `v2.5.0` Release。
 - `v2.2.3` Release：
   `https://github.com/xinna2001/Seele/releases/tag/v2.2.3`。
 - `v2.2.2` Release：
