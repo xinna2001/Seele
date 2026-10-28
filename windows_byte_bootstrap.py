@@ -13,6 +13,7 @@ import tarfile
 import time
 from pathlib import Path, PurePosixPath
 
+from botmux_install import BOTMUX_VERSION
 from platform_utils import app_path, hidden_subprocess_kwargs
 
 DISTRO = "Ubuntu-24.04"
@@ -39,6 +40,14 @@ def read_status() -> dict:
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
+
+
+def installation_is_current(status: dict | None = None) -> bool:
+    status = read_status() if status is None else status
+    return (
+        status.get("state") == "completed"
+        and status.get("botmux_version") == BOTMUX_VERSION
+    )
 
 
 def save_status(status: dict, **updates) -> dict:
@@ -307,7 +316,7 @@ def stage_runtime(distro: str, user: str) -> str:
     destination = home + "/.seele/windows_byte"
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w") as archive:
-        for name in ("windows_byte_linux.py", "botmux_setup_coach.py", "platform_utils.py",
+        for name in ("windows_byte_linux.py", "botmux_install.py", "botmux_setup_coach.py", "platform_utils.py",
                      "audio/mac_byte", "botmux-skill"):
             source = app_path(name)
             if not source.exists():
@@ -421,6 +430,7 @@ def run_install() -> int:
             register_keepalive(distro, user, home, sid)
             remove_resume()
             save_status(status, state="completed", stage="ready",
+                        botmux_version=BOTMUX_VERSION,
                         message="Botmux 已安装，已启用当前用户登录后自启。")
             print("\n" + status["message"])
             return 0
@@ -478,7 +488,7 @@ def main() -> int:
         platform_utils.get_base_dir = lambda: root
     if "--self-check" in sys.argv:
         return 0 if all(app_path(name).exists() for name in (
-            "windows_byte_linux.py", "botmux_setup_coach.py", "platform_utils.py",
+            "windows_byte_linux.py", "botmux_install.py", "botmux_setup_coach.py", "platform_utils.py",
             "botmux-skill/dist", "audio/mac_byte")) else 1
     if sys.platform != "win32":
         raise RuntimeError("此安装入口仅支持 Windows。")

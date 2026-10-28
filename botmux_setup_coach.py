@@ -291,44 +291,38 @@ class CompositeCoach:
 class HomebrewInstallCoach:
     """Guide Homebrew's password prompt and accept only known confirmations."""
 
-    _YES_NO_PROMPT_RE = re.compile(
-        r"(?:^|\n)[^\n]*\[(?:Y/n|y/N)\]\s*:?\s*$"
+    _CONFIRM_PROMPT_RE = re.compile(
+        r"(?:^|\n)[ \t]*(?:==>[ \t]*)?"
+        r"(?:(?P<enter>Press RETURN/ENTER to continue or any other key to abort:)"
+        r"|(?:Do you want to proceed with the installation\?|Continue installation\?)"
+        r"[ \t]*\[y/n\][ \t]*:?)",
+        re.IGNORECASE,
     )
 
     def __init__(self, on_cue: Callable[[VoiceCue], None] | None = None):
         self._decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
         self._buffer = ""
         self._password_prompt_count = 0
-        self._fired_actions: set[str] = set()
         self._on_cue = on_cue or (lambda cue: None)
 
     def feed(self, data: bytes) -> list[bytes]:
         decoded = self._decoder.decode(data)
-        self._buffer = strip_terminal_control((self._buffer + decoded)[-24000:])
+        # Retain raw chunks until matching; an ANSI escape can span two reads.
+        self._buffer = (self._buffer + decoded)[-24000:]
+        cleaned = strip_terminal_control(self._buffer)
 
-        password_prompt_count = self._buffer.count("Password:")
+        password_prompt_count = cleaned.count("Password:")
         if password_prompt_count > self._password_prompt_count:
             self._password_prompt_count = password_prompt_count
             self._on_cue(HOMEBREW_PASSWORD_CUE)
 
-        actions: list[bytes] = []
-        continue_prompt = (
-            "Press RETURN/ENTER to continue or any other key to abort:"
-        )
-        if (
-            "continue" not in self._fired_actions
-            and continue_prompt in self._buffer
-        ):
-            self._fired_actions.add("continue")
-            actions.append(b"\r")
-
-        if (
-            "yes_no" not in self._fired_actions
-            and self._YES_NO_PROMPT_RE.search(self._buffer)
-        ):
-            self._fired_actions.add("yes_no")
-            actions.append(b"y\r")
-
+        matches = list(self._CONFIRM_PROMPT_RE.finditer(cleaned))
+        actions = [b"\r" if match.group("enter") else b"Y\r" for match in matches]
+        if matches:
+            # Consume answered prompts, allowing later repetitions while avoiding
+            # an extra answer when only trailing whitespace arrives.
+            self._buffer = cleaned[matches[-1].end():]
+            self._password_prompt_count = self._buffer.count("Password:")
         return actions
 
 

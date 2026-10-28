@@ -45,7 +45,7 @@ if [ -s "$NVM_DIR/nvm.sh" ]; then
   source "$NVM_DIR/nvm.sh"
   set -u
 fi
-export PATH="$HOME/.local/bin:$HOME/.botmux/bin:$PATH"
+export PATH="$HOME/.botmux/bin:$HOME/.local/bin:$PATH"
 export XDG_RUNTIME_DIR="/run/user/$(id -u)"
 export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
 """
@@ -64,6 +64,9 @@ def has_bots(path: pathlib.Path) -> bool:
 
 
 def build_install_script(runtime: pathlib.Path, *, configured: bool) -> str:
+    # configure_linux executes this source alone as root before staging resources.
+    from botmux_install import official_install_commands, pinned_install_commands
+
     coach = shlex.join(["python3", str(runtime / "botmux_setup_coach.py")])
     login = coach + " --login-command -- "
     setup = "printf '\\n保留已有 Botmux 配置。\\n'" if configured else f"""
@@ -71,15 +74,10 @@ python3 {shlex.quote(str(runtime / 'windows_byte_linux.py'))} --voice botmux_set
 {coach}
 """
     return environment_script() + f"""
-if ! command -v botmux >/dev/null 2>&1; then
-  botmux_installer="$(mktemp)"
-  trap 'rm -f "$botmux_installer"' EXIT
-  curl -fsSL https://raw.githubusercontent.com/deepcoldy/botmux/master/install.sh -o "$botmux_installer"
-  sh "$botmux_installer"
-  rm -f "$botmux_installer"
-  trap - EXIT
-fi
-botmux --version
+{pinned_install_commands(
+    official_install_commands(),
+    after_install='if systemctl --user is-active --quiet botmux.service; then systemctl --user stop botmux.service; fi',
+)}
 if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1 ||
    ! node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)'; then
   if [ ! -s "$NVM_DIR/nvm.sh" ]; then
@@ -101,7 +99,7 @@ fi
 traex backend cn --help >/dev/null
 for profile in "$HOME/.profile" "$HOME/.bashrc"; do
   if ! grep -F '# Seele Windows byte CLI PATH' "$profile" >/dev/null 2>&1; then
-    printf '\\n# Seele Windows byte CLI PATH\\nexport PATH="$HOME/.local/bin:$HOME/.botmux/bin:$PATH"\\n' >> "$profile"
+    printf '\\n# Seele Windows byte CLI PATH\\nexport PATH="$HOME/.botmux/bin:$HOME/.local/bin:$PATH"\\n' >> "$profile"
   fi
 done
 if ! command -v lark-cli >/dev/null 2>&1; then

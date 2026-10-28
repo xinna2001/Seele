@@ -1,15 +1,16 @@
 # mac_byte 自动安装命令清单
 
-本文记录 Seele `v2.3.1` 中 `mac_byte` 首次启动实际执行的命令。权威实现位于
-`mac_byte_bootstrap.py` 和 `botmux_setup_coach.py`。
+本文记录 Seele `v2.5.1` 中 `mac_byte` 首次启动实际执行的命令。权威实现位于
+`mac_byte_bootstrap.py`、`botmux_install.py` 和 `botmux_setup_coach.py`。
 
 ## 触发模式
 
 Seele 仅在 macOS 且 `EDITION=mac_byte` 时运行安装检测。启动时分别解析
 `node`、`npm`、`tmux`、`traex`、`lark-cli`、`agentbuddy` 和 `botmux`；其中
-`traex` 还必须通过 `backend cn --help` 能力探测：
+`traex` 还必须通过 `backend cn --help` 能力探测，`botmux --version`
+必须为固定的 `3.54.0`：
 
-- `full`：缺少普通工具、Trae CLI 能力不兼容或缺少 Botmux 本体，进入完整流程，
+- `full`：缺少普通工具、Trae CLI 能力不兼容、缺少 Botmux 本体或版本不匹配，进入完整流程，
   但每个兼容的已安装组件都会独立跳过；
 - `setup`：七个命令均存在，但 `~/.botmux/bots.json` 没有有效配置；
 - `repair`：已有有效 Botmux 配置，但只缺少 `tmux`，或全部命令已存在但 Botmux
@@ -56,7 +57,8 @@ if ! command -v tmux >/dev/null 2>&1; then
     SeeleBotmuxCoach --homebrew-install -- /bin/bash -c "$installer"
     # 按 Apple Silicon / Intel 实际路径加载 brew shellenv。
   fi
-  HOMEBREW_NO_AUTO_UPDATE=1 brew install tmux
+  SeeleBotmuxCoach --homebrew-install -- \
+    env HOMEBREW_NO_AUTO_UPDATE=1 brew install tmux
 fi
 tmux -V
 ```
@@ -65,7 +67,9 @@ Homebrew 已存在或 `tmux` 已存在时直接跳过对应安装。全新 Mac �
 通常需要管理员密码：出现 `Password:` 时播放语音，密码仍由用户直接输入，helper
 不读取、不保存、不代填。官方安装器输出
 `Press RETURN/ENTER to continue or any other key to abort:` 时自动按回车；出现明确的
-`[Y/n]` 或 `[y/N]` 提示时自动输入 `y`。未知提示不会自动回答。权限确认完成后脚本
+`Do you want to proceed with the installation? [y/n]` 或
+`Continue installation? [Y/n]` 等安装确认时自动输入 `Y` 并回车，
+大小写不同、ANSI 分段输出和重复确认均可处理。未知提示不会自动回答。权限确认完成后脚本
 自动继续安装 tmux；安装失败则保留终端错误，不会启动缺少 tmux 的 Botmux daemon。
 
 ## Botmux 运行恢复
@@ -75,7 +79,8 @@ Homebrew 已存在或 `tmux` 已存在时直接跳过对应安装。全新 Mac �
 
 ```bash
 # 缺少时安装 tmux；已有时直接跳过。
-HOMEBREW_NO_AUTO_UPDATE=1 brew install tmux
+SeeleBotmuxCoach --homebrew-install -- \
+  env HOMEBREW_NO_AUTO_UPDATE=1 brew install tmux
 
 botmux plugin install "<APP_RESOURCES>/botmux-skill" --link
 botmux plugin enable seele
@@ -117,10 +122,22 @@ fi
 if ! command -v agentbuddy >/dev/null 2>&1; then
   npm install -g agentbuddy@latest --registry https://bnpm.byted.org/
 fi
-if ! command -v botmux >/dev/null 2>&1; then
-  npm install -g botmux@latest --registry https://registry.npmjs.org/
+# 以下省略共享版本检测函数的展开，详见 botmux_install.py。
+if ! botmux_matches_pinned_version; then
+  npm install -g botmux@3.54.0 --registry https://registry.npmjs.org/
+  export PATH="$HOME/.botmux/bin:$PATH"
+  hash -r
+  botmux_matches_pinned_version || exit 1
+  botmux stop
 fi
+botmux --version
 ```
+
+Botmux 版本由 `botmux_install.py` 的 `BOTMUX_VERSION` 统一指定，仅在用户明确
+要求时调整。新装以及已有旧版/更高版都使用 `3.54.0`，不会使用 `latest`。
+安装完成后校验 PATH 实际解析的命令版本；不符则停止，不继续登录或启动。
+优先解析 `$HOME/.botmux/bin/botmux`，防止旧系统命令遮蔽。
+替换成功后先停止旧 supervisor，登录与配置完成后再启动，保留原有机器人配置。
 
 Seele 不再只按 `command -v traex` 判断 Trae CLI 可用。早期版本虽然已有 `traex`
 命令，但没有 `backend` 子命令，会把 `backend` 当作提示词、再对 `cn` 报

@@ -562,7 +562,7 @@ class DesktopWife(QWidget):
         if self._bootstrap_thread and self._bootstrap_thread.is_alive():
             self._show_bubble_text("Botmux 安装终端已经打开。")
             return
-        if not force and windows_byte_bootstrap.read_status().get("state") == "completed":
+        if not force and windows_byte_bootstrap.installation_is_current():
             self._refresh_botmux_config()
             return
         self._bootstrap_thread = threading.Thread(

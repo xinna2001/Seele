@@ -1,6 +1,7 @@
 import json
 import importlib.util
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -11,6 +12,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import botmux_client
+import botmux_install
 import botmux_setup_coach
 import falseIntent
 import mac_byte_bootstrap
@@ -421,6 +423,125 @@ class IntentTests(unittest.TestCase):
         self.assertEqual(falseIntent.main("帮我部署项目一"), "部署项目")
 
 
+class BotmuxInstallationTests(unittest.TestCase):
+    def test_version_probe_rejects_failure_and_unrecognized_output(self):
+        for output, code, expected in (
+            ("3.54.0\n", 0, "3.54.0"),
+            ("botmux v3.54.0\n", 0, "3.54.0"),
+            ("3.17.0\n", 0, "3.17.0"),
+            ("3.54.0\n", 1, None),
+            ("error 3.54.0\n", 0, None),
+            ("3.54.0-dev\n", 0, None),
+        ):
+            with self.subTest(output=output, code=code), patch.object(
+                botmux_install.subprocess, "run",
+                return_value=subprocess.CompletedProcess([], code, stdout=output),
+            ):
+                self.assertEqual(botmux_install.installed_version("/test/botmux"), expected)
+        with patch.object(botmux_install.subprocess, "run", side_effect=OSError):
+            self.assertIsNone(botmux_install.installed_version("/test/botmux"))
+
+    @unittest.skipUnless(os.name == "posix", "isolated shell installation requires POSIX")
+    def test_pinned_installation_executes_both_installers_and_checks_actual_binary(self):
+        for official in (False, True):
+            for existing, installed, fail, expect_install in (
+                (None, "3.54.0", False, True),
+                ("3.17.0", "3.54.0", False, True),
+                ("3.54.0", "3.54.0", False, False),
+                ("3.55.0", "3.54.0", False, True),
+                ("3.17.0", "3.54.0", True, True),
+                ("3.17.0", "3.17.0", False, True),
+            ):
+                with self.subTest(official=official, existing=existing, installed=installed, fail=fail):
+                    with tempfile.TemporaryDirectory() as directory:
+                        root = Path(directory)
+                        fake_bin = root / "bin"
+                        fake_bin.mkdir()
+                        target_bin = root / ".botmux/bin"
+                        target_bin.mkdir(parents=True)
+                        config = root / ".botmux/bots.json"
+                        config.write_text('[{"name":"preserved"}]')
+                        log = root / "commands.log"
+                        log.touch()
+
+                        def executable(path, contents):
+                            path.write_text("#!/bin/sh\n" + contents)
+                            path.chmod(0o755)
+
+                        if existing:
+                            executable(fake_bin / "botmux", f'echo "{existing}"\n')
+                        candidate = root / "candidate"
+                        executable(candidate, f"""
+if [ "$1" = --version ]; then echo "{installed}"; else echo "$*" >> "$SEELE_TEST_LOG"; fi
+""")
+                        install_body = f"""
+{'test "$BOTMUX_VERSION" = v3.54.0 || exit 9' if official else ""}
+printf 'install\\n' >> "$SEELE_TEST_LOG"
+{"exit 42" if fail else ""}
+mkdir -p "$HOME/.botmux/bin"
+cp {shlex.quote(str(candidate))} "$HOME/.botmux/bin/botmux"
+"""
+                        if official:
+                            installer = root / "download"
+                            executable(installer, install_body)
+                            executable(fake_bin / "curl", f'cp {shlex.quote(str(installer))} "$4"\n')
+                            install = botmux_install.official_install_commands()
+                        else:
+                            executable(fake_bin / "npm", """
+test "$*" = "install -g botmux@3.54.0 --registry https://registry.npmjs.org/" || exit 9
+""" + install_body)
+                            install = "npm install -g botmux@3.54.0 --registry https://registry.npmjs.org/"
+                        script = "set -eu\n" + botmux_install.pinned_install_commands(
+                            install, after_install="botmux stop",
+                        ) + '\nprintf "proceed\\n" >> "$SEELE_TEST_LOG"\n'
+                        env = {
+                            **os.environ, "HOME": str(root),
+                            "PATH": f"{fake_bin}:/usr/bin:/bin",
+                            "SEELE_TEST_LOG": str(log),
+                        }
+                        shells = ["/bin/bash"] + (["/bin/zsh"] if sys.platform == "darwin" else [])
+                        for shell in shells:
+                            # Reset the installation to exercise each shell independently.
+                            (target_bin / "botmux").unlink(missing_ok=True)
+                            log.write_text("")
+                            result = subprocess.run(
+                                [shell, "-c", script], env=env, capture_output=True,
+                                text=True, timeout=10,
+                            )
+                            commands = log.read_text().splitlines()
+                            self.assertEqual("install" in commands, expect_install, result.stderr)
+                            succeeds = not fail and (not expect_install or installed == "3.54.0")
+                            self.assertEqual(result.returncode == 0, succeeds, result.stderr)
+                            self.assertEqual("proceed" in commands, succeeds)
+                            self.assertEqual("stop" in commands, succeeds and expect_install)
+                            self.assertEqual(config.read_text(), '[{"name":"preserved"}]')
+
+    @unittest.skipUnless(os.name == "posix", "executable PATH checks require POSIX")
+    def test_user_botmux_binary_takes_priority_over_stale_system_command(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            user_binary = root / ".botmux/bin/botmux"
+            user_binary.parent.mkdir(parents=True)
+            user_binary.write_text("#!/bin/sh\necho 3.54.0\n")
+            user_binary.chmod(0o755)
+            system_bin = root / "system"
+            system_bin.mkdir()
+            system_binary = system_bin / "botmux"
+            system_binary.write_text("#!/bin/sh\necho 3.17.0\n")
+            system_binary.chmod(0o755)
+            with patch.dict(os.environ, {"HOME": str(root), "PATH": str(system_bin)}):
+                self.assertEqual(mac_byte_bootstrap._command_path("botmux"), str(user_binary))
+            script = "set -eu\n" + botmux_install.pinned_install_commands(
+                "exit 9", after_install="exit 10",
+            )
+            result = subprocess.run(
+                ["/bin/bash", "-c", script], capture_output=True, text=True,
+                env={**os.environ, "HOME": str(root), "PATH": str(system_bin)}, timeout=10,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("3.54.0", result.stdout)
+
+
 class MacByteBootstrapTests(unittest.TestCase):
     def test_all_mac_byte_voice_files_exist(self):
         voice_files = {
@@ -540,11 +661,23 @@ class MacByteBootstrapTests(unittest.TestCase):
                 "_traex_supports_backend",
                 return_value=False,
             ) as supports_backend,
+            patch.object(mac_byte_bootstrap, "installed_version", return_value="3.54.0"),
         ):
             missing = mac_byte_bootstrap.missing_bootstrap_commands()
 
         self.assertEqual(missing, ["traex"])
         supports_backend.assert_called_once_with("/bin/traex")
+
+    def test_any_botmux_version_mismatch_triggers_installation(self):
+        for version in (None, "3.17.0", "3.54.0", "3.55.0"):
+            with (
+                self.subTest(version=version),
+                patch.object(mac_byte_bootstrap, "_command_path", side_effect=lambda c: f"/bin/{c}"),
+                patch.object(mac_byte_bootstrap, "_traex_supports_backend", return_value=True),
+                patch.object(mac_byte_bootstrap, "installed_version", return_value=version),
+            ):
+                expected = [] if version == "3.54.0" else ["botmux"]
+                self.assertEqual(mac_byte_bootstrap.missing_bootstrap_commands(), expected)
 
     def test_full_script_uses_official_login_commands_without_manual_pauses(self):
         script = mac_byte_bootstrap.build_bootstrap_script(
@@ -554,7 +687,7 @@ class MacByteBootstrapTests(unittest.TestCase):
             status_path=Path("/tmp/bootstrap-status.json"),
         )
         self.assertIn(
-            "npm install -g botmux@latest --registry https://registry.npmjs.org/",
+            "npm install -g botmux@3.54.0 --registry https://registry.npmjs.org/",
             script,
         )
         self.assertIn(mac_byte_bootstrap.HOMEBREW_INSTALL_URL, script)
@@ -565,6 +698,7 @@ class MacByteBootstrapTests(unittest.TestCase):
         )
         self.assertNotIn("NONINTERACTIVE=1 /bin/bash -c", script)
         self.assertIn("HOMEBREW_NO_AUTO_UPDATE=1 brew install tmux", script)
+        self.assertIn("--homebrew-install -- env HOMEBREW_NO_AUTO_UPDATE=1 brew install tmux", script)
         self.assertIn("tmux -V", script)
         self.assertEqual(
             script.count("HOMEBREW_NO_AUTO_UPDATE=1 brew install tmux"),
@@ -893,6 +1027,11 @@ class MacByteBootstrapTests(unittest.TestCase):
                         f'export PATH="{fake_bin}:/usr/bin:/bin"\n'
                         "hash -r"
                     ),
+                ),
+                patch.object(
+                    mac_byte_bootstrap,
+                    "_homebrew_command",
+                    side_effect=lambda *command: __import__("shlex").join(command),
                 ),
             ):
                 script = mac_byte_bootstrap.build_bootstrap_script(

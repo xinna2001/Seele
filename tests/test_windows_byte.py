@@ -76,6 +76,20 @@ class WindowsByteTests(unittest.TestCase):
             register.assert_called_once_with("Ubuntu-work", "original", "/home/original", "sid-test")
             remove.assert_called_once()
             self.assertEqual(host.read_status()["state"], "completed")
+            self.assertTrue(host.installation_is_current())
+
+    def test_pre_pin_windows_installation_runs_again(self):
+        for version in (None, "3.17.0", "3.55.0"):
+            with self.subTest(version=version):
+                self.assertFalse(host.installation_is_current({
+                    "state": "completed", "botmux_version": version,
+                }))
+        self.assertFalse(host.installation_is_current({
+            "state": "failed", "botmux_version": "3.54.0",
+        }))
+        self.assertTrue(host.installation_is_current({
+            "state": "completed", "botmux_version": "3.54.0",
+        }))
 
     def test_first_install_saves_reboot_boundary_before_distro_download(self):
         with (
@@ -164,6 +178,21 @@ class WindowsByteTests(unittest.TestCase):
             self.assertEqual(config["boot"]["systemd"], "true")
             self.assertEqual(config["user"]["default"], "original")
 
+    def test_wsl_configuration_source_runs_before_install_modules_are_staged(self):
+        source = pathlib.Path(linux.__file__).read_text()
+        scope = {"__name__": "seele_wsl_config"}
+        real_import = __import__
+
+        def before_staging(name, *args, **kwargs):
+            if name == "botmux_install":
+                raise ModuleNotFoundError(name)
+            return real_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=before_staging):
+            exec(compile(source, str(linux.__file__), "exec"), scope)
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertTrue(scope["configure_wsl"](pathlib.Path(directory) / "wsl.conf", "dev"))
+
     @unittest.skipUnless(os.name == "posix", "bash syntax check requires POSIX")
     def test_linux_generated_shell_is_valid_and_skips_existing_bots(self):
         for configured in (True, False):
@@ -171,6 +200,9 @@ class WindowsByteTests(unittest.TestCase):
             result = subprocess.run(["/bin/bash", "-n"], input=script.encode(), capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr.decode())
             self.assertIn("botmux autostart enable", script)
+            self.assertIn("env BOTMUX_VERSION=v3.54.0 sh", script)
+            self.assertIn("botmux_matches_pinned_version", script)
+            self.assertIn("systemctl --user stop botmux.service", script)
             self.assertIn("botmux-watchdog.timer", script)
             self.assertIn(" --login-command -- ", script)
             if configured:
