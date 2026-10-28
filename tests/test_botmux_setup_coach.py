@@ -176,15 +176,37 @@ class PromptCoachTests(unittest.TestCase):
         )
         self.assertEqual(
             coach.feed(b"\nContinue installation? [Y/n] "),
-            [b"y\r"],
+            [b"Y\r"],
         )
-        self.assertEqual(coach.feed(b"\nContinue installation? [Y/n] "), [])
+        self.assertEqual(coach.feed(b" "), [])
+        self.assertEqual(coach.feed(b"\nContinue installation? [Y/n] "), [b"Y\r"])
+
+    def test_homebrew_screenshot_prompt_handles_split_ansi_and_repetitions(self):
+        prompt = b"\n\x1b[1m==> Do you want to proceed with the installation? [y/n]\x1b[0m "
+        coach = botmux_setup_coach.HomebrewInstallCoach()
+        for _ in range(2):
+            actions = []
+            for byte in prompt:
+                actions.extend(coach.feed(bytes([byte])))
+            self.assertEqual(actions, [b"Y\r"])
+        self.assertEqual(coach.feed(b"\ninstallation complete\n"), [])
+
+    def test_homebrew_installation_confirmation_accepts_all_yes_no_capitalizations(self):
+        for choices in ("y/n", "Y/n", "y/N", "Y/N"):
+            with self.subTest(choices=choices):
+                coach = botmux_setup_coach.HomebrewInstallCoach()
+                self.assertEqual(
+                    coach.feed(f"==> Do you want to proceed with the installation? [{choices}] ".encode()),
+                    [b"Y\r"],
+                )
 
     def test_homebrew_coach_does_not_answer_unknown_questions(self):
         coach = botmux_setup_coach.HomebrewInstallCoach()
 
         self.assertEqual(coach.feed(b"Continue installation? (yes/no): "), [])
         self.assertEqual(coach.feed(b"Delete existing files? [yes/no]: "), [])
+        self.assertEqual(coach.feed(b"\nDelete existing files? [y/n]: "), [])
+        self.assertEqual(coach.feed(b"\nSend credentials? [Y/n]: "), [])
 
     def test_fixed_choices_follow_prompt_text_instead_of_menu_positions(self):
         coach = botmux_setup_coach.PromptCoach()
@@ -358,7 +380,9 @@ print(f"RESULT={source}|{relogin}|{compatibility}|{tenant}|{top}|{sub}|{mode}|{d
         import pty
 
         child_script = r"""
+import signal
 import sys
+signal.alarm(5)
 
 def ask(screen):
     sys.stdout.write(screen)
@@ -366,8 +390,9 @@ def ask(screen):
     return sys.stdin.readline().strip()
 
 enter = ask("Press RETURN/ENTER to continue or any other key to abort:")
-yes = ask("Continue installation? [y/N] ")
-print(f"RESULT={enter}|{yes}")
+yes = ask("\x1b[1m==> Do you want to proceed with the installation? [y/n]\x1b[0m ")
+again = ask("\n==> Do you want to proceed with the installation? [y/n] ")
+print(f"RESULT={enter}|{yes}|{again}")
 """
         input_master, input_slave = pty.openpty()
         output_read, output_write = os.pipe()
@@ -385,7 +410,7 @@ print(f"RESULT={enter}|{yes}")
         output = os.read(output_read, 65536).decode("utf-8", errors="replace")
 
         self.assertEqual(code, 0)
-        self.assertIn("RESULT=|y", output)
+        self.assertIn("RESULT=|Y|Y", output)
 
 
 if __name__ == "__main__":

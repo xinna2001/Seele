@@ -25,16 +25,23 @@
    默认 root 时，请输入已有用户名，或创建新用户并设置 Linux 密码。
 5. 合并 `/etc/wsl.conf` 的 systemd 与默认用户设置，保留网络与挂载设置。
    配置变化时只重启目标发行版；请先保存该发行版中的工作。
-6. 安装 Linux 依赖、官方自包含 Botmux、Node 22、Trae CLI、Lark CLI 与 AgentBuddy。
+6. 安装 Linux 依赖、官方自包含 Botmux `3.52.0`、Node 22、Trae CLI、Lark CLI 与 AgentBuddy。
    已有兼容组件跳过。按终端提示完成本人登录、扫码、名称和邮箱输入；
    Windows Chrome 优先打开授权网页，固定 Botmux 菜单项自动填写。
 7. 保留已有 `.botmux/bots.json`，安装 Seele 插件并启用 systemd 用户服务、
    watchdog 和 linger。CLI 及 Botmux 数据放在 Linux 用户目录。
+
 8. 注册当前 Windows 用户登录任务和每 5 分钟恢复触发器。
    前台 Linux 保活进程让 WSL 持续存活；服务由 systemd/watchdog 恢复。
    任务不保存 Windows 密码，只在该用户登录后运行。
 9. 桌宠从选定用户的 WSL UNC 文件读取 Dashboard 动态端口与令牌，
    通过 Windows localhost 连接。显式 `botmux_config.json` 或环境变量优先。
+
+Botmux 固定版本入口为 `botmux_install.py` 的 `BOTMUX_VERSION`，仅随用户明确
+要求调整。官方安装器使用 `BOTMUX_VERSION=v3.52.0`，已有其他版本也会纠正；
+安装后校验实际命令版本，不符则停止。优先使用 `$HOME/.botmux/bin`，
+成功替换后停止原服务，在配置完成后启动指定版本。
+早期安装完成记录会重新执行版本检查，保留原 Ubuntu、普通用户及机器人配置。
 
 ## 失败续装与运维
 

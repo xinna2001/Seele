@@ -12,6 +12,7 @@ import time
 import uuid
 from pathlib import Path
 
+from botmux_install import BOTMUX_VERSION, installed_version, pinned_install_commands
 from platform_utils import app_path
 
 
@@ -134,6 +135,10 @@ return "not_found"
 
 
 def _command_path(command: str) -> str | None:
+    if command == "botmux":
+        installed = Path.home() / ".botmux" / "bin" / "botmux"
+        if installed.is_file() and os.access(installed, os.X_OK):
+            return str(installed)
     direct = shutil.which(command)
     if direct:
         return direct
@@ -173,6 +178,8 @@ def missing_bootstrap_commands() -> list[str]:
         path = _command_path(command)
         if path is None or (
             command == "traex" and not _traex_supports_backend(path)
+        ) or (
+            command == "botmux" and installed_version(path) != BOTMUX_VERSION
         ):
             missing.append(command)
     return missing
@@ -264,6 +271,7 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$HOME/.botmux/bin
 if command -v brew >/dev/null 2>&1; then
   eval "$(brew shellenv)"
 fi
+export PATH="$HOME/.botmux/bin:$PATH"
 hash -r
 """.strip()
 
@@ -295,7 +303,7 @@ else
     printf '\\nHomebrew 安装校验失败，无法继续安装 tmux。\\n' >&2
     exit 1
   fi
-  HOMEBREW_NO_AUTO_UPDATE=1 brew install tmux
+  {_homebrew_command("env", "HOMEBREW_NO_AUTO_UPDATE=1", "brew", "install", "tmux")}
   hash -r
 fi
 tmux -V
@@ -410,14 +418,16 @@ def _botmux_coach_command() -> str:
 
 
 def _homebrew_install_command() -> str:
-    command = shlex.join([
+    return f'{_homebrew_command("/bin/bash", "-c")} "$homebrew_installer"'
+
+
+def _homebrew_command(*command: str) -> str:
+    return shlex.join([
         *_coach_helper_base_command(),
         "--homebrew-install",
         "--",
-        "/bin/bash",
-        "-c",
+        *command,
     ])
-    return f'{command} "$homebrew_installer"'
 
 
 def _login_command(*command: str) -> str:
@@ -482,13 +492,10 @@ else
   hash -r
 fi
 
-if command -v botmux >/dev/null 2>&1; then
-  printf '[已安装] Botmux: %s\\n' "$(command -v botmux)"
-else
-  printf '[待安装] Botmux\\n'
-  npm install -g botmux@latest --registry {PUBLIC_NPM_REGISTRY}
-  hash -r
-fi
+{pinned_install_commands(
+    f"npm install -g botmux@{BOTMUX_VERSION} --registry {PUBLIC_NPM_REGISTRY}",
+    after_install="botmux stop",
+)}
 
 {_npm_prelude()}
 for required_command in node npm tmux traex lark-cli agentbuddy botmux; do

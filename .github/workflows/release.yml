@@ -118,6 +118,7 @@ jobs:
             --add-data "MAC_BYTE_ZERO_TOUCH_RESEARCH.md;." `
             --add-data "WINDOWS_BYTE_INSTALL.md;." `
             --add-data "windows_byte_linux.py;." `
+            --add-data "botmux_install.py;." `
             --add-data "botmux_setup_coach.py;." `
             --add-data "platform_utils.py;." `
             --add-data "EDITION;." `

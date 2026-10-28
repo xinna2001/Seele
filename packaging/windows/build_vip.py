@@ -22,7 +22,7 @@ DEPENDENCIES = ["PyQt5>=5.15.9,<5.16", "qt-material>=2.14,<3",
                 "sounddevice>=0.5,<1", "soundfile>=0.13,<1", "certifi>=2024.2"]
 SOURCES = [
     "Seele.py", "run_exe.py", "platform_utils.py", "windows_byte_bootstrap.py",
-    "windows_byte_linux.py", "mac_byte_bootstrap.py", "botmux_setup_coach.py",
+    "windows_byte_linux.py", "mac_byte_bootstrap.py", "botmux_install.py", "botmux_setup_coach.py",
     "Tray.py", "OutVoice.py", "initialize.py", "VoiceToText.py", "StartupMode.py",
     "write_file.py", "ProgramsConfigWindow.py", "RoleSwitchWindow.py", "TaskPanelWindow.py",
     "botmux_client.py", "rpa_bridge.py", "rpa_service.py", "play_stare.py",
@@ -128,7 +128,7 @@ def build(output: pathlib.Path) -> pathlib.Path:
             if file.testzip() is not None:
                 raise RuntimeError("ZIP validation failed")
             for required in ("runtime/python.exe", "runtime/pythonw.exe", "site-packages/PyQt5/Qt5/bin/Qt5Core.dll",
-                             "botmux-skill/dist/mcp/server.js", "windows_byte_linux.py", "EDITION"):
+                             "botmux-skill/dist/mcp/server.js", "windows_byte_linux.py", "botmux_install.py", "EDITION"):
                 if "Seele-WindowsByte/" + required not in file.namelist():
                     raise RuntimeError(f"Missing package resource: {required}")
         digest = hashlib.sha256(target.read_bytes()).hexdigest()

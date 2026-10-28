@@ -106,10 +106,12 @@ VIP 便携测试包完整解压后双击 `启动希儿.vbs`。源码可设置
 
 - 独立检测 Node.js、npm、tmux、Trae CLI、Lark CLI、AgentBuddy 和 Botmux；Trae CLI
   还会校验 `backend cn` 能力，旧版命令虽存在但不支持该能力时自动升级；
-- 缺少 tmux 时优先使用已有 Homebrew 安装；Homebrew 也不存在时先运行官方安装脚本，再安装 tmux；
+- 缺少 tmux 时优先使用已有 Homebrew 安装；Homebrew 也不存在时先运行官方安装脚本，再安装 tmux；安装确认自动输入 `Y` 并回车；
 - 工具链完整但没有机器人配置：直接打开 `botmux setup`；
 - 工具链完整且 Botmux 已配置：不重复打开安装流程；
-- 安装脚本要求字节内网；Botmux 固定从 npm 官方源获取 `latest`，不锁定具体版本；
+- 安装脚本要求字节内网；mac_byte 从 npm 官方源安装 Botmux `3.52.0`，
+  windows_byte 使用官方安装器指定相同版本；已有其他版本也会纠正并校验，
+  保留机器人配置。版本只随用户明确要求调整，入口为 `botmux_install.py`；
 - Trae、Lark CLI、AgentBuddy 和 Botmux 登录均在 Terminal 中完成，链接和二维码不会被桌面窗口遮挡；
 - Trae、Lark CLI 和 AgentBuddy 使用官方登录命令，授权成功并通过状态校验后自动进入下一阶段；
 - Trae、Lark CLI 和 AgentBuddy 登录默认不抢占 Terminal，语音播放与浏览器授权可并行；旧记录在后台清理，链接超时或命令失败时才唤起 Terminal；
