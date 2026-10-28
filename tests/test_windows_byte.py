@@ -179,7 +179,7 @@ class WindowsByteTests(unittest.TestCase):
             self.assertEqual(config["user"]["default"], "original")
 
     def test_wsl_configuration_source_runs_before_install_modules_are_staged(self):
-        source = pathlib.Path(linux.__file__).read_text()
+        source = pathlib.Path(linux.__file__).read_bytes()
         scope = {"__name__": "seele_wsl_config"}
         real_import = __import__
 

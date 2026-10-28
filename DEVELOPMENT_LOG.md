@@ -47,6 +47,11 @@
   - mac_byte：`e52f5cd743af32cc689ce29e9681240d94a949c42c207616f32e1196b615418b`。
   - windows_byte：`7ae0fcb5ed50c98f8db6ee059cf0179160ef66ef9bedaa64214401a3f1ac246c`。
 - 功能分支：`fix/botmux-3.54-install-confirmation`，正式版仍为 2.5.0。
+- 修复提交：`2d54229`；PR：`https://github.com/xinna2001/Seele/pull/6`。
+  已推送功能分支并创建 PR，等待审核；未合并或发布。
+- 首次 Windows CI 指出新增源码独立执行测试默认按 CP1252 读 UTF-8 文件，
+  导致 `UnicodeDecodeError`；改为读取原始字节并由 Python 编译器解析编码，
+  与实际 WSL 配置下发的字节合同一致。安装代码及 VIP 包不受该测试读取问题影响。
 
 ## 2026-10-21 安装、自动更新与设置保留（2.5.0）
 
