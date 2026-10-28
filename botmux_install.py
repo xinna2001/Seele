@@ -7,7 +7,7 @@ import subprocess
 
 
 # Change only when the user explicitly requests another installation version.
-BOTMUX_VERSION = "3.54.0"
+BOTMUX_VERSION = "3.52.0"
 BOTMUX_INSTALL_URL = (
     "https://raw.githubusercontent.com/deepcoldy/botmux/master/install.sh"
 )

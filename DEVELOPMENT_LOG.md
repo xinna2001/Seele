@@ -12,7 +12,8 @@
 
 ## 2026-10-28 Botmux 固定版本与安装确认修复（2.5.1）
 
-用户明确要求固定安装 Botmux 3.54（完整版本 3.54.0），版本后续由用户告知，
+用户最初给出 Botmux 3.54，随后明确更正为 3.52（完整版本 3.52.0）。
+最终固定安装版本为 3.52.0，后续变更由用户告知，
 并要求提交 PR；本轮已授权功能分支提交、推送和创建 PR。
 尚未授权合并、Tag 或正式发布。
 
@@ -20,8 +21,8 @@
   macOS 的 `brew install tmux` 没有经过 PTY helper，
   Homebrew coach 又不匹配截图中的小写 `[y/n]`，且只回答一次确认。
 - `botmux_install.py`：共享固定版本、只读版本探测、安装后实际命令校验；
-  macOS 使用官方 npm 的 `botmux@3.54.0`，Windows WSL 官方安装器指定
-  `BOTMUX_VERSION=v3.54.0`。任何不匹配版本均安装纠正，失败停止。
+  macOS 使用官方 npm 的 `botmux@3.52.0`，Windows WSL 官方安装器指定
+  `BOTMUX_VERSION=v3.52.0`。任何不匹配版本均安装纠正，失败停止。
 - 优先解析用户 `.botmux/bin`，避免旧系统命令遮蔽。
   安装验证成功后停止旧 supervisor/用户服务，完成流程后启动；
   在后续登录中断并续跑时，也不会复用仍存活的旧二进制。
@@ -30,9 +31,9 @@
   原始分块保留到匹配时处理 ANSI。tmux 安装接入同一 helper。
 - Windows 旧安装记录重新执行版本检查；WSL stage、自检、源码 VIP 和
   Windows Release 资源列表包含共享策略。Linux 配置函数仍可在资源下发前独立执行。
-- 验证：105 项 Python 全套回归及新增 2 项针对性回归通过，共 107 项；
+- 验证：固定版本更正为 3.52.0 后，107 项 Python 全套回归通过；
   包括两种安装器在隔离 bash/zsh 中实跑、
-  新装、3.17.0、3.54.0、较新版、安装失败、校验不符、PATH 遮蔽与配置保留；
+  新装、3.17.0、指定版本、较新版、安装失败、校验不符、PATH 遮蔽与配置保留；
   真实 PTY 子进程自动收到截图提示的 `Y` 和回车两次；
   未知删除/凭据问题不自动回答。生成的 zsh/bash 安装脚本语法通过。
 - 使用临时目录和假安装器验证，未更新或重启本机 Botmux。
@@ -43,9 +44,7 @@
   截图提示连续两次自动收到 `Y` 与回车，安装继续成功。临时目录已清理。
 - `vip-packages/Seele-2.5.1-vip-test-windows_byte-x64-portable.zip`：
   源码便携包构建、ZIP 完整性、版本与共享策略/WSL 源资源核验通过。
-- 两包 SHA256：
-  - mac_byte：`e52f5cd743af32cc689ce29e9681240d94a949c42c207616f32e1196b615418b`。
-  - windows_byte：`7ae0fcb5ed50c98f8db6ee059cf0179160ef66ef9bedaa64214401a3f1ac246c`。
+- 版本更正后交付的两包必须固定 3.52.0；SHA256 见对应的 `.zip.sha256` 文件。
 - 功能分支：`fix/botmux-3.54-install-confirmation`，正式版仍为 2.5.0。
 - 修复提交：`2d54229`；PR：`https://github.com/xinna2001/Seele/pull/6`。
   已推送功能分支并创建 PR，等待审核；未合并或发布。

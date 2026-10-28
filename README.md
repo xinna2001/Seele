@@ -109,7 +109,7 @@ VIP 便携测试包完整解压后双击 `启动希儿.vbs`。源码可设置
 - 缺少 tmux 时优先使用已有 Homebrew 安装；Homebrew 也不存在时先运行官方安装脚本，再安装 tmux；安装确认自动输入 `Y` 并回车；
 - 工具链完整但没有机器人配置：直接打开 `botmux setup`；
 - 工具链完整且 Botmux 已配置：不重复打开安装流程；
-- 安装脚本要求字节内网；mac_byte 从 npm 官方源安装 Botmux `3.54.0`，
+- 安装脚本要求字节内网；mac_byte 从 npm 官方源安装 Botmux `3.52.0`，
   windows_byte 使用官方安装器指定相同版本；已有其他版本也会纠正并校验，
   保留机器人配置。版本只随用户明确要求调整，入口为 `botmux_install.py`；
 - Trae、Lark CLI、AgentBuddy 和 Botmux 登录均在 Terminal 中完成，链接和二维码不会被桌面窗口遮挡；

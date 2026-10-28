@@ -79,16 +79,16 @@ class WindowsByteTests(unittest.TestCase):
             self.assertTrue(host.installation_is_current())
 
     def test_pre_pin_windows_installation_runs_again(self):
-        for version in (None, "3.17.0", "3.55.0"):
+        for version in (None, "3.17.0", "3.54.0"):
             with self.subTest(version=version):
                 self.assertFalse(host.installation_is_current({
                     "state": "completed", "botmux_version": version,
                 }))
         self.assertFalse(host.installation_is_current({
-            "state": "failed", "botmux_version": "3.54.0",
+            "state": "failed", "botmux_version": "3.52.0",
         }))
         self.assertTrue(host.installation_is_current({
-            "state": "completed", "botmux_version": "3.54.0",
+            "state": "completed", "botmux_version": "3.52.0",
         }))
 
     def test_first_install_saves_reboot_boundary_before_distro_download(self):
@@ -200,7 +200,7 @@ class WindowsByteTests(unittest.TestCase):
             result = subprocess.run(["/bin/bash", "-n"], input=script.encode(), capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr.decode())
             self.assertIn("botmux autostart enable", script)
-            self.assertIn("env BOTMUX_VERSION=v3.54.0 sh", script)
+            self.assertIn("env BOTMUX_VERSION=v3.52.0 sh", script)
             self.assertIn("botmux_matches_pinned_version", script)
             self.assertIn("systemctl --user stop botmux.service", script)
             self.assertIn("botmux-watchdog.timer", script)

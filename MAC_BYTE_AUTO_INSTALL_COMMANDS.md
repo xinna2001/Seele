@@ -8,7 +8,7 @@
 Seele 仅在 macOS 且 `EDITION=mac_byte` 时运行安装检测。启动时分别解析
 `node`、`npm`、`tmux`、`traex`、`lark-cli`、`agentbuddy` 和 `botmux`；其中
 `traex` 还必须通过 `backend cn --help` 能力探测，`botmux --version`
-必须为固定的 `3.54.0`：
+必须为固定的 `3.52.0`：
 
 - `full`：缺少普通工具、Trae CLI 能力不兼容、缺少 Botmux 本体或版本不匹配，进入完整流程，
   但每个兼容的已安装组件都会独立跳过；
@@ -124,7 +124,7 @@ if ! command -v agentbuddy >/dev/null 2>&1; then
 fi
 # 以下省略共享版本检测函数的展开，详见 botmux_install.py。
 if ! botmux_matches_pinned_version; then
-  npm install -g botmux@3.54.0 --registry https://registry.npmjs.org/
+  npm install -g botmux@3.52.0 --registry https://registry.npmjs.org/
   export PATH="$HOME/.botmux/bin:$PATH"
   hash -r
   botmux_matches_pinned_version || exit 1
@@ -134,7 +134,7 @@ botmux --version
 ```
 
 Botmux 版本由 `botmux_install.py` 的 `BOTMUX_VERSION` 统一指定，仅在用户明确
-要求时调整。新装以及已有旧版/更高版都使用 `3.54.0`，不会使用 `latest`。
+要求时调整。新装以及已有旧版/更高版都使用 `3.52.0`，不会使用 `latest`。
 安装完成后校验 PATH 实际解析的命令版本；不符则停止，不继续登录或启动。
 优先解析 `$HOME/.botmux/bin/botmux`，防止旧系统命令遮蔽。
 替换成功后先停止旧 supervisor，登录与配置完成后再启动，保留原有机器人配置。
