@@ -7,6 +7,8 @@
 
 - 当前采用“本地修改 -> 用户实际验收 -> 用户明确确认 -> 提交和发布”的顺序。
 - 未经用户确认，不提交、不推送、不创建 Tag、不更新 GitHub Release。
+- 用户本人提交的 PR 在授权推送且必要检查通过后直接合并，无需再次等待人工审核；
+  保留功能分支和 PR 记录。Tag/Release 仍需当前会话的明确发布授权。
 - 不在本文记录 Token、Cookie、账号、内网凭据或其他秘密。
 - 不删除远端 Release、Tag 或回退远端分支，除非用户明确批准。
 
@@ -14,8 +16,9 @@
 
 用户最初给出 Botmux 3.54，随后明确更正为 3.52（完整版本 3.52.0）。
 最终固定安装版本为 3.52.0，后续变更由用户告知，
-并要求提交 PR；本轮已授权功能分支提交、推送和创建 PR。
-尚未授权合并、Tag 或正式发布。
+并要求提交 PR；随后明确要求推送后直接合并本人 PR，
+并授权更新和正式发布 2.5.1。本轮使用功能分支 -> PR -> 检查通过后合并 ->
+Tag/Release 的流程，不再重复等待人工审核。
 
 - 根因：两端只检查 Botmux 命令是否存在，已有旧版被直接复用；
   macOS 的 `brew install tmux` 没有经过 PTY helper，
@@ -45,12 +48,42 @@
 - `vip-packages/Seele-2.5.1-vip-test-windows_byte-x64-portable.zip`：
   源码便携包构建、ZIP 完整性、版本与共享策略/WSL 源资源核验通过。
 - 版本更正后交付的两包必须固定 3.52.0；SHA256 见对应的 `.zip.sha256` 文件。
-- 功能分支：`fix/botmux-3.54-install-confirmation`，正式版仍为 2.5.0。
+- 功能分支：`fix/botmux-3.54-install-confirmation` 保留；
+  分支名沿用最初版本，最终代码固定 3.52.0。
 - 修复提交：`2d54229`；PR：`https://github.com/xinna2001/Seele/pull/6`。
-  已推送功能分支并创建 PR，等待审核；未合并或发布。
+  已按用户授权直接合并，合并提交 `e34c8a393c65c0d14542f697eea8c21580ce56c5`；
+  `v2.5.1` 已推送并指向该提交，正式打包工作流已成功。
 - 首次 Windows CI 指出新增源码独立执行测试默认按 CP1252 读 UTF-8 文件，
   导致 `UnicodeDecodeError`；改为读取原始字节并由 Python 编译器解析编码，
   与实际 WSL 配置下发的字节合同一致。安装代码及 VIP 包不受该测试读取问题影响。
+
+### 合并与发布
+
+- 主分支 CI `40662075055`、Tag CI `40662188673` 的 Windows、macOS、
+  Ubuntu 检查全部通过；正式打包工作流 `40662188350` 的
+  mac_byte、windows、windows_byte 和发布全部成功。
+- 正式 Release：`https://github.com/xinna2001/Seele/releases/tag/v2.5.1`；
+  官方 latest 已为 2.5.1，14 个附件全部 uploaded。
+- 三份发布清单的版本、edition、平台、提交与 SHA256 核验通过；
+  校验文件列出的所有资产摘要均与 GitHub 计算的 digest 一致。
+- 发布说明已更新并读回核验，突出 Botmux 3.52.0 固定版本与自动 Y/回车修复。
+- 使用官方 latest 返回数据验证三种类型：2.5.0 正确选择 2.5.1 ZIP，
+  当前 2.5.1 不重复更新；两版本的更新选择与设置代码一致。
+- 三种正式 ZIP 均从 Release 实际下载，SHA256、全量 ZIP CRC、安全解压、
+  包内 VERSION/EDITION、桌宠资源及冻结主程序的 Botmux 3.52.0 编译常量通过。
+- mac_byte 包的严格签名、冻结 GUI、updater helper、coach 路径与联网检查通过；
+  用解压包主程序的编译模块生成 tmux 安装命令，实际包内 PTY helper
+  连续两次发送 Y/回车，并自动处理官方回车确认，子进程继续完成。
+- Windows 普通版与字节版的 EXE/updater helper 核验通过；
+  字节版的 WSL helper 编译常量为 3.52.0，四份 Linux 源资源与 Tag 代码一致。
+  Windows checkout 的 CRLF 仅有换行差异；原始字节仍可由 Python 编译通过。
+- 正式 ZIP SHA256：
+  - mac_byte：`a13b8be41353683aa42f7845892cfeaa2ed3127ba370c261e76ed2571e4a096a`。
+  - windows：`71e57c0abaf2fa1c7f5ffd920b6e438ac672a560d990e5d232863947e19cc6e3`。
+  - windows_byte：`51e7f5068c2f844919b4c817c828f5d73ab46d878c81d8147bad5897d2f0ee79`。
+- 下载、解压和隔离自检数据已物理清理，原有 VIP 包与用户未跟踪文件保留。
+  Windows 真实 WSL 安装、重启和本人授权仍待真机验收。
+- 本次发布记录另走文档功能分支/PR 合并；不移动或改写已发布的 v2.5.1 Tag。
 
 ## 2026-10-21 安装、自动更新与设置保留（2.5.0）
 
@@ -178,7 +211,9 @@ Windows PyInstaller EXE 构建未在当前 macOS 主机执行。
 
 - 仓库：`https://github.com/xinna2001/Seele`
 - 当前分支：`main`
-- 当前正式版 `v2.5.0` 发布提交：`b90311b34a8b2fd4e3e5d54a442dfedf66c37cad`
+- 当前正式版 `v2.5.1` 发布提交：`e34c8a393c65c0d14542f697eea8c21580ce56c5`
+- `v2.5.1` Release：`https://github.com/xinna2001/Seele/releases/tag/v2.5.1`。
+- `v2.5.0` 发布提交：`b90311b34a8b2fd4e3e5d54a442dfedf66c37cad`
 - `v2.5.0` Release：`https://github.com/xinna2001/Seele/releases/tag/v2.5.0`。
 - `v2.2.3` 发布提交：`6169d28`
 - `v2.2.2` 发布提交：`cf7c73e`
@@ -194,7 +229,7 @@ Windows PyInstaller EXE 构建未在当前 macOS 主机执行。
 - `v1.0.0`：提交 `0619912`
 - GitHub 已存在 `v1.0.0`、`v2.0.0`、`v2.0.1`、`v2.0.3`、`v2.1.0`、
   `v2.1.1`、`v2.2.0`、`v2.2.1`、`v2.2.2`、`v2.2.3`、
-  `v2.3.0`、`v2.3.1` 和 `v2.5.0` Release。
+  `v2.3.0`、`v2.3.1`、`v2.5.0` 和 `v2.5.1` Release。
 - `v2.2.3` Release：
   `https://github.com/xinna2001/Seele/releases/tag/v2.2.3`。
 - `v2.2.2` Release：
